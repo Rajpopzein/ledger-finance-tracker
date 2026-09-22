@@ -41,7 +41,7 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     setError('')
     setPassword('')
     setConfirm('')
-    if(next==='signup')setHandle('')
+    if(next==='signup')setHandle(name.trim()?generateLedgerId(name):'')
   }
 
   async function submit(e:FormEvent){
@@ -57,7 +57,11 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
 
     setBusy(true)
     try{
-      if(signup)await api.signup(name.trim(),handle.trim(),email,password)
+      const signupHandle=signup?(handle.trim()||generateLedgerId(name)):''
+      if(signup){
+        setHandle(signupHandle)
+        await api.signup(name.trim(),signupHandle,email,password)
+      }
       await api.login(email,password)
       onAuthenticated()
     }catch(err:any){
