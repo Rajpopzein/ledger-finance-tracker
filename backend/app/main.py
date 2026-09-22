@@ -281,23 +281,35 @@ def _bounds(from_date:date|None,to_date:date|None):
 def _filtered_stmt(
     from_date:date|None,
     to_date:date|None,
-    family_scope:str="self",
-    family_member_id:int|None=None,
+    user_ids:list[int]|None=None,
 ):
     stmt=select(Transaction)
     start,end=_bounds(from_date,to_date)
     if start is not None: stmt=stmt.where(Transaction.txn_at>=start)
     if end is not None: stmt=stmt.where(Transaction.txn_at<end)
-
-    if family_member_id is not None:
-        stmt=stmt.where(Transaction.family_member_id==family_member_id)
-    elif family_scope=="self":
-        stmt=stmt.where(Transaction.family_member_id.is_(None))
-    elif family_scope=="family":
-        stmt=stmt.where(Transaction.family_member_id.is_not(None))
-    elif family_scope!="all":
-        raise HTTPException(400,"family_scope must be self, family or all")
+    if user_ids is not None:
+        stmt=stmt.where(Transaction.user_id.in_(user_ids))
     return stmt
+
+def _scope_user_ids(
+    request:Request,
+    db:Session,
+    family_scope:str="self",
+    family_user_id:int|None=None,
+):
+    user_id=current_user_id(request)
+    linked=linked_user_ids(db,user_id)
+    if family_user_id is not None:
+        if family_user_id not in linked:
+            raise HTTPException(403,"That user is not linked to your family")
+        return [family_user_id]
+    if family_scope=="self":
+        return [user_id]
+    if family_scope=="family":
+        return linked or [-1]
+    if family_scope=="all":
+        return [user_id,*linked]
+    raise HTTPException(400,"family_scope must be self, family or all")
 
 @app.get("/api/transactions")
 def transactions(
@@ -396,16 +408,13 @@ def summary(
     from_date:date|None=None,
     to_date:date|None=None,
     family_scope:str="self",
-    family_member_id:int|None=None,
+    family_user_id:int|None=None,
     db:Session=Depends(get_db),
 ):
-    claims=getattr(request.state,"auth",None)
-    if claims and claims.get("role")=="family":
-        family_scope="all"
-        family_member_id=int(claims["sub"])
+    user_ids=_scope_user_ids(request,db,family_scope,family_user_id)
 
     items=db.scalars(
-        _filtered_stmt(from_date,to_date,family_scope,family_member_id)
+        _filtered_stmt(from_date,to_date,user_ids)
         .where(Transaction.excluded_from_analytics==False)
     ).all()
     income=sum((t.amount for t in items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
@@ -429,15 +438,14 @@ def summary(
             _filtered_stmt(
                 month_start,
                 next_month-timedelta(days=1),
-                family_scope,
-                family_member_id,
+                user_ids,
             ).where(Transaction.excluded_from_analytics==False)
         ).all()
         m_income=sum((t.amount for t in month_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
         m_spent=sum((t.amount for t in month_items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
         months.append({"label":month_start.strftime("%b"),"income":float(m_income),"spent":float(m_spent)})
     family_items=db.scalars(
-        _filtered_stmt(from_date,to_date,"all",None)
+        _filtered_stmt(from_date,to_date,_scope_user_ids(request,db,"all",None))
         .where(Transaction.excluded_from_analytics==False)
     ).all()
     family_totals=defaultdict(Decimal)
