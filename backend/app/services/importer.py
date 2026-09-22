@@ -94,7 +94,7 @@ def _rows_from_matrix(matrix):
         sample = []
         for values in matrix[:10]:
             sample.extend([_norm_header(v) for v in values if v not in (None, "")])
-        visible = ", ".join(dict.fromkeys(x for x in sample if x)[:12]) if sample else "none"
+        visible = ", ".join(list(dict.fromkeys(x for x in sample if x))[:12]) if sample else "none"
         raise ValueError(
             "Could not identify the bank statement header row. "
             f"Detected columns/text: {visible}"
