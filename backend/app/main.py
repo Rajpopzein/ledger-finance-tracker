@@ -51,7 +51,6 @@ PUBLIC_API_PATHS = {
     "/api/auth/status",
     "/api/auth/setup",
     "/api/auth/login",
-    "/api/auth/family-signup",
     "/api/auth/signup",
     "/api/auth/logout",
 }
@@ -209,26 +208,6 @@ def auth_login(body: OwnerLogin, request: Request, response: Response, db: Sessi
 def auth_logout(response: Response):
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
-
-@app.post("/api/auth/family-signup")
-def family_signup(body: FamilySignup, request: Request, response: Response, db: Session = Depends(get_db)):
-    code = body.member_code.strip()
-    email = str(body.email).strip().lower()
-    member = db.scalar(select(FamilyMember).where(func.lower(FamilyMember.member_code) == code.lower()))
-    if not member or not member.is_active:
-        raise HTTPException(404, "Family member ID not found")
-    if member.email:
-        raise HTTPException(409, "This family member is already registered")
-    if db.scalar(select(Owner).where(func.lower(Owner.email) == email)) or db.scalar(select(FamilyMember).where(func.lower(FamilyMember.email) == email)):
-        raise HTTPException(409, "Email is already in use")
-    salt, password_hash = hash_password(body.password)
-    member.email = email
-    member.password_salt = salt
-    member.password_hash = password_hash
-    db.commit()
-    _set_session_cookie(response, request, create_session(member.id, "family"))
-    return {"ok": True, "email": member.email, "role": "family", "family_member_id": member.id}
-
 
 @app.get("/api/accounts")
 def accounts(request:Request, db:Session=Depends(get_db)):
