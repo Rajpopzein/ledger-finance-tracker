@@ -22,7 +22,7 @@ from .services.secrets import encrypt
 from .services.ai import ask_model
 from .upi_imports import router as upi_imports_router
 from .bank_imports import router as bank_imports_router
-from .users import router as users_router, linked_user_ids
+from .users import router as users_router, linked_user_ids, current_user_id
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -231,18 +231,30 @@ def family_signup(body: FamilySignup, request: Request, response: Response, db: 
 
 
 @app.get("/api/accounts")
-def accounts(db:Session=Depends(get_db)):
-    return [{"id":a.id,"name":a.name,"institution":a.institution,"mask":a.account_mask,"type":a.type} for a in db.scalars(select(Account).where(Account.is_active==True).order_by(Account.id)).all()]
+def accounts(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    rows=db.scalars(
+        select(Account)
+        .where(Account.user_id==user_id, Account.is_active==True)
+        .order_by(Account.id)
+    ).all()
+    return [{"id":a.id,"name":a.name,"institution":a.institution,"mask":a.account_mask,"type":a.type} for a in rows]
 
 @app.post("/api/accounts")
-def create_account(body:AccountCreate, db:Session=Depends(get_db)):
+def create_account(body:AccountCreate, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
     institution=body.institution.strip()
     mask=(body.account_mask or "").strip() or None
-    existing=db.scalar(select(Account).where(func.lower(Account.institution)==institution.lower(), Account.account_mask==mask, Account.type==body.type))
+    existing=db.scalar(select(Account).where(
+        Account.user_id==user_id,
+        func.lower(Account.institution)==institution.lower(),
+        Account.account_mask==mask,
+        Account.type==body.type,
+    ))
     if existing:
         return {"id":existing.id,"name":existing.name,"institution":existing.institution,"mask":existing.account_mask,"type":existing.type}
     display=body.name.strip() if body.name and body.name.strip() else f"{institution}{' ••'+mask[-4:] if mask else ''}"
-    account=Account(name=display,institution=institution,account_mask=mask,type=body.type,is_active=True)
+    account=Account(user_id=user_id,name=display,institution=institution,account_mask=mask,type=body.type,is_active=True)
     db.add(account); db.commit(); db.refresh(account)
     return {"id":account.id,"name":account.name,"institution":account.institution,"mask":account.account_mask,"type":account.type}
 
