@@ -10,7 +10,7 @@ const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
 
 export default function Overview(){
   const {period,setPeriodKey}=usePeriod()
-  const {familyScope,familyMemberId,scopeLabel}=useFamily()
+  const {familyScope,familyUserId,scopeLabel}=useFamily()
   const [s,setS]=useState<Summary|null>(null)
   const [tx,setTx]=useState<Tx[]>([])
   const [cash,setCash]=useState(false)
@@ -22,8 +22,8 @@ export default function Overview(){
     setError('')
     try{
       const [summary,transactions]=await Promise.all([
-        api.summary(period.from,period.to,familyScope,familyMemberId),
-        api.transactions('',period.from,period.to,familyScope,familyMemberId)
+        api.summary(period.from,period.to,familyScope,familyUserId),
+        api.transactions('',period.from,period.to,familyScope,familyUserId)
       ])
       setS(summary)
       setTx(transactions.slice(0,4))
@@ -36,7 +36,7 @@ export default function Overview(){
     }
   }
 
-  useEffect(()=>{load()},[period.from,period.to,familyScope,familyMemberId])
+  useEffect(()=>{load()},[period.from,period.to,familyScope,familyUserId])
 
   if(loading)return <div className="dashboard-state card">
     <div className="upload-spinner" aria-hidden="true"/>
@@ -57,7 +57,7 @@ export default function Overview(){
 
   return <>
     <div className="page-head">
-      <div><small>{period.label.toUpperCase()} • {scopeLabel.toUpperCase()}</small><h1>Good evening, Raj</h1></div>
+      <div><small>{period.label.toUpperCase()} • {scopeLabel.toUpperCase()}</small><h1>Dashboard</h1></div>
       <button className="primary" onClick={()=>setCash(true)}>+ Add cash expense</button>
     </div>
 
@@ -110,7 +110,7 @@ export default function Overview(){
           ? <div className="family-spending">{s.family_spending.map(member=>
               <div key={member.id??'self'}>
                 <div className="row between">
-                  <span><b>{member.name}</b><small>{member.member_code}</small></span>
+                  <span><b>{member.name}</b><small>{member.handle}</small></span>
                   <b>{money(member.amount)}</b>
                 </div>
                 <div className="bar"><i style={{width:`${Math.min(100,member.amount/familyMax*100)}%`}}/></div>
@@ -130,7 +130,7 @@ export default function Overview(){
                   <strong>{t.merchant||t.description||'Transaction'}</strong>
                   <span>{t.category} • {t.account}</span>
                   <div className="tx-pills">
-                    {t.family_member&&<em className="family-pill">{t.family_member.name}</em>}
+                    {t.user&&<em className="family-pill">{t.user.name} • {t.user.handle}</em>}
                     {upiLabel(t)&&<em className="source-pill">{upiLabel(t)}</em>}
                   </div>
                 </div>
