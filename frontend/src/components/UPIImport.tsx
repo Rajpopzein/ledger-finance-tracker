@@ -1,10 +1,7 @@
 import {useState} from 'react'
 import {api} from '../api/client'
 
-type Props={accounts:any[]}
-
-export default function UPIImport({accounts}:Props){
-  const [account,setAccount]=useState<number|undefined>(accounts[0]?.id)
+export default function UPIImport(){
   const [app,setApp]=useState('google_pay')
   const [file,setFile]=useState<File|null>(null)
   const [preview,setPreview]=useState<any>(null)
@@ -12,14 +9,12 @@ export default function UPIImport({accounts}:Props){
   const [error,setError]=useState('')
 
   async function inspect(selected:File){
-    const accountId=account||accounts[0]?.id
-    if(!accountId)return
     setFile(selected)
     setPreview(null)
     setError('')
     setBusy('preview')
     try{
-      setPreview(await api.upiPreview(accountId,app,selected))
+      setPreview(await api.upiPreview(app,selected))
     }catch(e:any){
       setError(e.message||'Could not read this UPI export.')
     }finally{
@@ -28,24 +23,17 @@ export default function UPIImport({accounts}:Props){
   }
 
   async function commit(){
-    const accountId=account||accounts[0]?.id
-    if(!accountId||!file)return
+    if(!file)return
     setBusy('commit')
     setError('')
     try{
-      const result=await api.upiCommit(accountId,app,file)
+      const result=await api.upiCommit(app,file)
       setPreview({...preview,committed:result})
     }catch(e:any){
       setError(e.message||'Could not import this UPI history.')
     }finally{
       setBusy('idle')
     }
-  }
-
-  if(!accounts.length){
-    return <div className="card empty">
-      Add an account in Settings first. UPI imports can be linked to any active Ledger account.
-    </div>
   }
 
   return <div className="gridImport">
@@ -59,12 +47,10 @@ export default function UPIImport({accounts}:Props){
           </select>
         </label>
 
-        <label>
-          Linked account
-          <select value={account||accounts[0]?.id||''} disabled={busy!=='idle'} onChange={e=>{setAccount(Number(e.target.value));setPreview(null);setFile(null)}}>
-            {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </label>
+        <div className="attention upi-account-note">
+          No bank account selection is required. Ledger checks every account you own for a matching UPI/UTR transaction.
+          If no safe bank match exists, the transaction is stored under <b>UPI • Unassigned</b>.
+        </div>
 
         <label className={`drop ${busy==='preview'?'drop-busy':''}`}>
           {busy==='preview'
@@ -73,7 +59,7 @@ export default function UPIImport({accounts}:Props){
                 <b>Checking UPI history…</b>
                 <span>{file?.name}</span>
                 <div className="upload-progress"><i/></div>
-                <small>Ledger is checking UPI/UTR IDs and existing transactions on the selected account.</small>
+                <small>Ledger is reconciling references, amount, date and direction across all your accounts.</small>
               </>
             : <>
                 <b>{file?'Choose another export':'Choose UPI export'}</b>
@@ -130,17 +116,19 @@ export default function UPIImport({accounts}:Props){
           : preview.committed
             ? <div className="success">
                 {preview.committed.inserted} new transactions added, {preview.committed.linked} existing transactions linked to {preview.committed.app}, and {preview.committed.review} left for review.
+                {preview.committed.inserted>0&&<> New unmatched items are in <b>{preview.committed.fallback_account}</b>.</>}
               </div>
             : <>
                 <p className="muted">
-                  Existing matches are linked to {preview.app} as another source. Ledger creates a new transaction only when no safe match exists.
+                  Existing matches keep their original bank account and gain the {preview.app} source label.
+                  Only transactions without a safe match are created under UPI • Unassigned.
                 </p>
                 <button className="primary" onClick={commit} disabled={busy!=='idle'||!file}>
                   {busy==='commit'?'Importing…':`Import ${preview.new||0} new + link ${preview.existing||0}`}
                 </button>
                 {busy==='commit'&&<div className="commit-status">
                   <div className="upload-spinner small" aria-hidden="true"/>
-                  Reconciling UPI history with your ledger…
+                  Reconciling UPI history across your ledger…
                 </div>}
               </>
         }
@@ -151,13 +139,14 @@ export default function UPIImport({accounts}:Props){
       <h2>UPI reconciliation</h2>
       <div className="steps">
         <div><b>1</b><span>Read successful Google Pay / PhonePe transactions</span></div>
-        <div><b>2</b><span>Match UPI transaction ID, UTR or RRN</span></div>
-        <div><b>3</b><span>Check the selected account, amount, date and direction</span></div>
-        <div><b>4</b><span>Attach the UPI app label to existing transactions</span></div>
-        <div><b>5</b><span>Create only transactions that are genuinely missing</span></div>
+        <div><b>2</b><span>Search all your accounts for UPI ID, UTR or RRN</span></div>
+        <div><b>3</b><span>Verify amount, date and direction</span></div>
+        <div><b>4</b><span>Attach the UPI app label to matching bank transactions</span></div>
+        <div><b>5</b><span>Place unmatched transactions in UPI • Unassigned</span></div>
       </div>
       <p className="muted">
-        Searchable PDF statements are supported. Image-only/scanned PDFs are rejected instead of being OCRed automatically. Amount/date-only matches are not merged automatically; ambiguous matches stay in Review.
+        Searchable PDF statements are supported. Image-only/scanned PDFs are rejected instead of being OCRed automatically.
+        Amount/date-only matches remain in Review rather than being merged automatically.
       </p>
     </aside>
   </div>
