@@ -25,7 +25,15 @@ function Shell(){
     </aside>
     <div className="shell">
       <header>
-        <div className="period">{options.map(o=><button key={o.key} className={period.key===o.key?'active':''} onClick={()=>setPeriodKey(o.key)}>{o.label}</button>)}</div>
+        <div className="period desktop-period">{options.map(o=><button key={o.key} className={period.key===o.key?'active':''} onClick={()=>setPeriodKey(o.key)}>{o.label}</button>)}</div>
+        <select
+          className="mobile-period-select"
+          value={period.key}
+          onChange={e=>setPeriodKey(e.target.value as typeof period.key)}
+          aria-label="Select period"
+        >
+          {options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
         <span className="date">{period.rangeLabel}</span>
       </header>
       <main><Outlet/></main>
