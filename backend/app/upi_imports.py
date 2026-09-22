@@ -17,12 +17,41 @@ router = APIRouter()
 def _source_type():
     return "upi_app"
 
-def _existing_file_source(db: Session, account_id: int, file_hash: str, label: str):
+def _user_accounts(db: Session, user_id: int):
+    return db.scalars(
+        select(Account)
+        .where(Account.user_id == user_id, Account.is_active == True)
+        .order_by(Account.id)
+    ).all()
+
+def _unassigned_upi_account(db: Session, user_id: int):
+    account = db.scalar(
+        select(Account).where(
+            Account.user_id == user_id,
+            Account.type == "upi",
+            Account.institution == "UPI",
+        )
+    )
+    if account:
+        return account
+
+    account = Account(
+        user_id=user_id,
+        name="UPI • Unassigned",
+        institution="UPI",
+        type="upi",
+        is_active=True,
+    )
+    db.add(account)
+    db.flush()
+    return account
+
+def _existing_file_source(db: Session, user_id: int, file_hash: str, label: str):
     return db.scalar(
         select(TransactionSource.id)
         .join(Transaction, TransactionSource.transaction_id == Transaction.id)
         .where(
-            Transaction.account_id == account_id,
+            Transaction.user_id == user_id,
             TransactionSource.source_type == _source_type(),
             TransactionSource.source_name == label,
             TransactionSource.external_hash == file_hash,
@@ -30,7 +59,7 @@ def _existing_file_source(db: Session, account_id: int, file_hash: str, label: s
         .limit(1)
     )
 
-def _classify(db: Session, account_id: int, row):
+def _classify(db: Session, user_id: int, row):
     upi_ref = row.get("upi_ref")
 
     if upi_ref:
@@ -48,35 +77,38 @@ def _classify(db: Session, account_id: int, row):
 
         exact = db.scalar(
             select(Transaction).where(
-                Transaction.account_id == account_id,
+                Transaction.user_id == user_id,
                 or_(*ref_conditions),
             )
         )
         if exact:
             return exact, "upi_ref", 1.0, "existing"
 
-    match, method, score = find_match(
-        db,
-        account_id=account_id,
-        txn_at=row["txn_at"],
-        amount=row["amount"],
-        direction=row["direction"],
-        description=row["description"],
-        upi_ref=upi_ref,
-        bank_ref=upi_ref,
-    )
-    if match and method in ("upi_ref", "bank_ref", "fingerprint"):
-        return match, method, score, "existing"
-    if match:
-        return match, method, score, "review"
+    # Reuse the deterministic matcher across every real account owned by the user.
+    # UPI • Unassigned is excluded because it is the fallback destination.
+    for account in _user_accounts(db, user_id):
+        if account.type == "upi" and account.institution == "UPI":
+            continue
+        match, method, score = find_match(
+            db,
+            account_id=account.id,
+            txn_at=row["txn_at"],
+            amount=row["amount"],
+            direction=row["direction"],
+            description=row["description"],
+            upi_ref=upi_ref,
+            bank_ref=upi_ref,
+        )
+        if match and method in ("upi_ref", "bank_ref", "fingerprint"):
+            return match, method, score, "existing"
+        if match:
+            return match, method, score, "review"
 
-    # A unique same-day amount/direction hit is useful evidence, but not safe
-    # enough to merge automatically when the descriptions differ.
     start = row["txn_at"] - timedelta(days=1)
     end = row["txn_at"] + timedelta(days=1)
     candidates = db.scalars(
         select(Transaction).where(
-            Transaction.account_id == account_id,
+            Transaction.user_id == user_id,
             Transaction.amount == row["amount"],
             Transaction.direction == row["direction"],
             Transaction.txn_at >= start,
@@ -101,20 +133,16 @@ def _parse(app: str, file: UploadFile, content: bytes):
 @router.post("/api/imports/upi/preview")
 async def preview_upi(
     request: Request,
-    account_id: int = Form(...),
     app: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
-    account = db.get(Account, account_id)
-    if not account or account.user_id != user_id:
-        raise HTTPException(404, "Account not found")
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
     label, rows = _parse(app, file, content)
 
-    if _existing_file_source(db, account_id, file_hash, label):
+    if _existing_file_source(db, user_id, file_hash, label):
         return {
             "already_imported": True,
             "app": label,
@@ -130,7 +158,7 @@ async def preview_upi(
     counts = {"new": 0, "existing": 0, "review": 0}
     items = []
     for row in rows:
-        match, method, score, state = _classify(db, account_id, row)
+        match, method, score, state = _classify(db, user_id, row)
         counts[state] += 1
         items.append({
             "txn_at": row["txn_at"].isoformat(),
@@ -140,6 +168,7 @@ async def preview_upi(
             "upi_ref": row.get("upi_ref"),
             "state": state,
             "match_id": match.id if match else None,
+            "matched_account": match.account.name if match and match.account else None,
             "match_method": method,
             "score": score,
         })
@@ -157,20 +186,16 @@ async def preview_upi(
 @router.post("/api/imports/upi/commit")
 async def commit_upi(
     request: Request,
-    account_id: int = Form(...),
     app: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
-    account = db.get(Account, account_id)
-    if not account or account.user_id != user_id:
-        raise HTTPException(404, "Account not found")
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
     label, rows = _parse(app, file, content)
 
-    if _existing_file_source(db, account_id, file_hash, label):
+    if _existing_file_source(db, user_id, file_hash, label):
         return {
             "already_imported": True,
             "inserted": 0,
@@ -179,15 +204,17 @@ async def commit_upi(
             "app": label,
         }
 
+    fallback_account = _unassigned_upi_account(db, user_id)
+
     batch = db.scalar(
         select(ImportBatch).where(
-            ImportBatch.account_id == account_id,
+            ImportBatch.account_id == fallback_account.id,
             ImportBatch.file_hash == file_hash,
         )
     )
     if not batch:
         batch = ImportBatch(
-            account_id=account_id,
+            account_id=fallback_account.id,
             file_name=file.filename or f"{label}-export",
             file_hash=file_hash,
             status="committed",
@@ -199,17 +226,19 @@ async def commit_upi(
             db.rollback()
             batch = db.scalar(
                 select(ImportBatch).where(
-                    ImportBatch.account_id == account_id,
+                    ImportBatch.account_id == fallback_account.id,
                     ImportBatch.file_hash == file_hash,
                 )
             )
+            if not batch:
+                raise HTTPException(409, "UPI import is already in progress")
 
     inserted = 0
     linked = 0
     review = 0
 
     for row in rows:
-        match, method, score, state = _classify(db, account_id, row)
+        match, method, score, state = _classify(db, user_id, row)
 
         if state == "review":
             review += 1
@@ -238,7 +267,7 @@ async def commit_upi(
             continue
 
         fp = fingerprint(
-            account_id,
+            fallback_account.id,
             row["txn_at"],
             row["amount"],
             row["direction"],
@@ -246,7 +275,7 @@ async def commit_upi(
         )
         tx = Transaction(
             user_id=user_id,
-            account_id=account_id,
+            account_id=fallback_account.id,
             txn_at=row["txn_at"],
             amount=row["amount"],
             direction=row["direction"],
@@ -275,4 +304,5 @@ async def commit_upi(
         "linked": linked,
         "review": review,
         "app": label,
+        "fallback_account": fallback_account.name,
     }
