@@ -80,7 +80,7 @@ function Shell(){
       <main><Outlet/></main>
     </div>
 
-    <div className="mobile-nav">{nav.slice(0,5).map(([to,label])=><NavLink key={to} to={to} end={to==='/' }>{label.split(' ')[0]}</NavLink>)}</div>
+    <div className="mobile-nav">{nav.map(([to,label])=><NavLink key={to} to={to} end={to==='/' }>{label.split(' ')[0]}</NavLink>)}</div>
   </div>
 }
 
