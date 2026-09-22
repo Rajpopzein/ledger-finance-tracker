@@ -2,6 +2,7 @@ import csv, io, re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
+import xlrd
 
 DATE_KEYS = ["date", "transaction date", "txn date", "value date", "value dt", "transaction dt", "txn dt"]
 DESC_KEYS = ["description", "narration", "details", "transaction remarks", "remarks", "particulars", "transaction details"]
@@ -329,4 +330,21 @@ def parse_statement(name: str, content: bytes):
         rows = _rows_from_matrix(matrix)
         return normalize_rows(rows)
 
-    raise ValueError("Only CSV and XLSX are enabled in v1")
+    if lower.endswith(".xls"):
+        book = xlrd.open_workbook(file_contents=content)
+        sheet = book.sheet_by_index(0)
+        matrix = []
+        for row_index in range(sheet.nrows):
+            values = []
+            for cell in sheet.row(row_index):
+                if cell.ctype == xlrd.XL_CELL_DATE:
+                    values.append(xlrd.xldate_as_datetime(cell.value, book.datemode))
+                else:
+                    values.append(cell.value)
+            matrix.append(values)
+        if not matrix:
+            return []
+        rows = _rows_from_matrix(matrix)
+        return normalize_rows(rows)
+
+    raise ValueError("Only CSV, XLSX and XLS are enabled in v1")
