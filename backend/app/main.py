@@ -19,6 +19,7 @@ from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
 from .services.ai import ask_model
+from .upi_imports import router as upi_imports_router
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -29,6 +30,7 @@ from .services.auth import (
 )
 
 app = FastAPI(title="Ledger v1 API")
+app.include_router(upi_imports_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
