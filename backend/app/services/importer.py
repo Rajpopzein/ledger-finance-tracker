@@ -18,6 +18,7 @@ COMBINED_AMOUNT_KEYS = [
     "debit credit", "withdrawal dr deposit cr", "withdrawal deposit",
     "withdrawal dr deposit cr amount"
 ]
+BALANCE_KEYS = ["balance", "closing balance", "running balance", "available balance"]
 TYPE_KEYS = ["type", "dr cr", "transaction type", "txn type", "debit credit type"]
 REF_KEYS = ["reference", "ref no", "reference no", "utr", "transaction id", "txn id", "chq ref no", "cheque ref no"]
 
@@ -33,8 +34,6 @@ DEBIT_ALIASES = _aliases(DEBIT_KEYS)
 CREDIT_ALIASES = _aliases(CREDIT_KEYS)
 AMOUNT_ALIASES = _aliases(AMOUNT_KEYS)
 COMBINED_AMOUNT_ALIASES = _aliases(COMBINED_AMOUNT_KEYS)
-TYPE_ALIASES = _aliases(TYPE_KEYS)
-REF_ALIASES = _aliases(REF_KEYS)
 
 def _key(row, candidates):
     lookup = {_norm_header(k): k for k in row.keys() if k is not None}
@@ -48,11 +47,11 @@ def _decimal(value):
     if value in (None, ""):
         return Decimal("0")
     raw = str(value).strip()
-    negative = raw.startswith("(") and raw.endswith(")")
+    accounting_negative = raw.startswith("(") and raw.endswith(")") and not re.search(r"\b(?:dr|cr)\b", raw, re.I)
     cleaned = re.sub(r"[^0-9.\-]", "", raw)
     try:
         amount = Decimal(cleaned or "0")
-        return -amount if negative else amount
+        return -amount if accounting_negative else amount
     except InvalidOperation:
         return Decimal("0")
 
@@ -73,6 +72,15 @@ def _direction_marker(value):
     if compact in {"c", "crd"}:
         return "credit"
     return None
+
+def _balance(value):
+    amount = _decimal(value)
+    marker = _direction_marker(value)
+    if marker == "debit":
+        return -abs(amount)
+    if marker == "credit":
+        return abs(amount)
+    return amount
 
 def _date(value):
     if isinstance(value, datetime):
@@ -139,8 +147,55 @@ def _rows_from_matrix(matrix):
         if any(cell not in (None, "") for cell in row)
     ]
 
+def _balance_direction(items, index, prefer_previous):
+    item = items[index]
+    balance = item.get("_balance")
+    amount = item["amount"]
+    if balance is None:
+        return None
+
+    candidates = []
+    if prefer_previous:
+        candidates = [index - 1, index + 1]
+    else:
+        candidates = [index + 1, index - 1]
+
+    for neighbor_index in candidates:
+        if neighbor_index < 0 or neighbor_index >= len(items):
+            continue
+        neighbor_balance = items[neighbor_index].get("_balance")
+        if neighbor_balance is None:
+            continue
+
+        delta = balance - neighbor_balance
+        if abs(abs(delta) - amount) <= Decimal("0.02"):
+            return "credit" if delta > 0 else "debit"
+
+    return None
+
+def _balance_order(items):
+    previous_matches = 0
+    next_matches = 0
+
+    for index, item in enumerate(items):
+        balance = item.get("_balance")
+        if balance is None:
+            continue
+
+        if index > 0 and items[index - 1].get("_balance") is not None:
+            delta = balance - items[index - 1]["_balance"]
+            if abs(abs(delta) - item["amount"]) <= Decimal("0.02"):
+                previous_matches += 1
+
+        if index + 1 < len(items) and items[index + 1].get("_balance") is not None:
+            delta = balance - items[index + 1]["_balance"]
+            if abs(abs(delta) - item["amount"]) <= Decimal("0.02"):
+                next_matches += 1
+
+    return previous_matches >= next_matches
+
 def normalize_rows(rows):
-    out = []
+    parsed = []
 
     for row in rows:
         date_key = _key(row, DATE_KEYS)
@@ -149,47 +204,11 @@ def normalize_rows(rows):
         credit_key = _key(row, CREDIT_KEYS)
         amount_key = _key(row, AMOUNT_KEYS)
         combined_amount_key = _key(row, COMBINED_AMOUNT_KEYS)
+        balance_key = _key(row, BALANCE_KEYS)
         type_key = _key(row, TYPE_KEYS)
         ref_key = _key(row, REF_KEYS)
 
         if not date_key or not description_key:
-            continue
-
-        amount = Decimal("0")
-        direction = None
-
-        if debit_key or credit_key:
-            debit_amount = _decimal(row.get(debit_key)) if debit_key else Decimal("0")
-            credit_amount = _decimal(row.get(credit_key)) if credit_key else Decimal("0")
-
-            if debit_amount != 0:
-                amount, direction = abs(debit_amount), "debit"
-            elif credit_amount != 0:
-                amount, direction = abs(credit_amount), "credit"
-
-        elif combined_amount_key:
-            raw_value = row.get(combined_amount_key)
-            parsed_amount = _decimal(raw_value)
-            marker = _direction_marker(raw_value)
-
-            if parsed_amount != 0 and marker:
-                amount, direction = abs(parsed_amount), marker
-
-        elif amount_key:
-            raw_value = row.get(amount_key)
-            parsed_amount = _decimal(raw_value)
-
-            if parsed_amount != 0:
-                marker = _direction_marker(row.get(type_key)) if type_key else None
-                marker = marker or _direction_marker(raw_value)
-
-                if marker:
-                    amount, direction = abs(parsed_amount), marker
-                else:
-                    amount = abs(parsed_amount)
-                    direction = "credit" if parsed_amount > 0 and str(raw_value).strip().startswith("+") else "debit"
-
-        if amount == 0 or direction is None:
             continue
 
         try:
@@ -197,16 +216,98 @@ def normalize_rows(rows):
         except ValueError:
             continue
 
+        amount = Decimal("0")
+        direction = None
+        direction_source = None
+
+        if debit_key or credit_key:
+            debit_amount = _decimal(row.get(debit_key)) if debit_key else Decimal("0")
+            credit_amount = _decimal(row.get(credit_key)) if credit_key else Decimal("0")
+
+            if debit_amount != 0:
+                amount, direction, direction_source = abs(debit_amount), "debit", "column"
+            elif credit_amount != 0:
+                amount, direction, direction_source = abs(credit_amount), "credit", "column"
+
+        elif combined_amount_key:
+            raw_value = row.get(combined_amount_key)
+            parsed_amount = _decimal(raw_value)
+            marker = _direction_marker(raw_value)
+
+            if parsed_amount != 0:
+                amount = abs(parsed_amount)
+                if marker:
+                    direction, direction_source = marker, "marker"
+                elif parsed_amount < 0:
+                    direction, direction_source = "debit", "sign"
+
+        elif amount_key:
+            raw_value = row.get(amount_key)
+            parsed_amount = _decimal(raw_value)
+
+            if parsed_amount != 0:
+                amount = abs(parsed_amount)
+                marker = _direction_marker(row.get(type_key)) if type_key else None
+                marker = marker or _direction_marker(raw_value)
+
+                if marker:
+                    direction, direction_source = marker, "marker"
+                elif parsed_amount < 0:
+                    direction, direction_source = "debit", "sign"
+                elif str(raw_value).strip().startswith("+"):
+                    direction, direction_source = "credit", "sign"
+
+        if amount == 0:
+            continue
+
         description = str(row.get(description_key) or "").strip()
         reference = str(row.get(ref_key) or "").strip() if ref_key else None
+        balance = None
+        if balance_key and row.get(balance_key) not in (None, ""):
+            balance = _balance(row.get(balance_key))
 
-        out.append({
+        parsed.append({
             "txn_at": txn_at,
             "amount": amount,
             "direction": direction,
+            "direction_source": direction_source,
             "description": description,
             "bank_ref": reference or None,
+            "_balance": balance,
         })
+
+    if not parsed:
+        return []
+
+    prefer_previous = _balance_order(parsed)
+
+    out = []
+    unresolved = 0
+    for index, item in enumerate(parsed):
+        balance_direction = _balance_direction(parsed, index, prefer_previous)
+
+        # Running-balance arithmetic is the strongest available signal.
+        if balance_direction:
+            item["direction"] = balance_direction
+            item["direction_source"] = "balance"
+
+        if item["direction"] is None:
+            unresolved += 1
+            continue
+
+        out.append({
+            "txn_at": item["txn_at"],
+            "amount": item["amount"],
+            "direction": item["direction"],
+            "description": item["description"],
+            "bank_ref": item["bank_ref"],
+        })
+
+    if unresolved and not out:
+        raise ValueError(
+            "Transaction amounts were found, but debit/credit direction could not be determined safely. "
+            "This statement needs a bank-specific mapping."
+        )
 
     return out
 
