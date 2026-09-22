@@ -97,10 +97,10 @@ export function UIProvider({children}:{children:ReactNode}){
       },
       divider:resolvedMode==='dark'?'rgba(255,255,255,.08)':'rgba(18,43,34,.10)',
     },
-    shape:{borderRadius:18},
+    shape:{borderRadius:14},
     typography:{
       fontFamily:'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      h1:{fontSize:'clamp(1.8rem,4vw,2.7rem)',fontWeight:750,letterSpacing:'-.035em'},
+      h1:{fontSize:'clamp(1.65rem,4vw,2.55rem)',fontWeight:750,letterSpacing:'-.03em',lineHeight:1.12},
       h2:{fontSize:'1.12rem',fontWeight:720,letterSpacing:'-.015em'},
       button:{textTransform:'none',fontWeight:700},
     },
@@ -121,7 +121,7 @@ export function UIProvider({children}:{children:ReactNode}){
       MuiButton:{
         defaultProps:{disableElevation:true},
         styleOverrides:{
-          root:{borderRadius:12,minHeight:40}
+          root:{borderRadius:10,minHeight:40}
         }
       },
       MuiTextField:{
@@ -158,11 +158,11 @@ export function useUI(){
 export const claySx=(mode:'light'|'dark')=>({
   border:'1px solid',
   borderColor:'divider',
-  borderRadius:4,
+  borderRadius:2.25,
   background:mode==='dark'
     ? 'linear-gradient(145deg, rgba(31,38,47,.95), rgba(17,22,28,.96))'
     : 'linear-gradient(145deg, rgba(255,255,255,.98), rgba(232,239,235,.98))',
   boxShadow:mode==='dark'
-    ? '10px 10px 26px rgba(0,0,0,.38), -8px -8px 22px rgba(52,63,74,.18), inset 1px 1px 0 rgba(255,255,255,.05)'
-    : '10px 10px 24px rgba(127,145,136,.20), -8px -8px 22px rgba(255,255,255,.88), inset 1px 1px 0 rgba(255,255,255,.9)',
+    ? '6px 8px 20px rgba(0,0,0,.28), -4px -4px 14px rgba(52,63,74,.10), inset 1px 1px 0 rgba(255,255,255,.04)'
+    : '6px 8px 18px rgba(127,145,136,.15), -4px -4px 14px rgba(255,255,255,.70), inset 1px 1px 0 rgba(255,255,255,.8)',
 })
