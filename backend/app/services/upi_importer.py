@@ -6,6 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
 import xlrd
+from pypdf import PdfReader
 
 APP_LABELS = {
     "google_pay": "Google Pay",
@@ -90,6 +91,10 @@ def _date(value):
         "%d %b %Y, %I:%M %p", "%d %b %Y %I:%M %p",
         "%b %d, %Y, %I:%M:%S %p", "%b %d, %Y %I:%M:%S %p",
         "%b %d, %Y, %I:%M %p", "%b %d, %Y %I:%M %p",
+        "%d %B %Y, %I:%M %p", "%d %B %Y %I:%M %p",
+        "%B %d, %Y, %I:%M %p", "%B %d, %Y %I:%M %p",
+        "%d %b %Y", "%d %B %Y", "%b %d, %Y", "%B %d, %Y",
+        "%d %b %Y %H:%M", "%d %B %Y %H:%M",
     )
     for fmt in formats:
         try:
@@ -195,6 +200,138 @@ def _collect_json_rows(value):
     walk(value)
     return rows
 
+
+PDF_DATE_PATTERNS = (
+    re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?\b", re.I),
+    re.compile(r"\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}(?:(?:,\s*|\s+)\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?\b", re.I),
+    re.compile(r"\b[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}(?:(?:,\s*|\s+)\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)?\b", re.I),
+)
+
+def _pdf_date(text):
+    for pattern in PDF_DATE_PATTERNS:
+        for match in pattern.finditer(text):
+            try:
+                return _date(match.group(0))
+            except ValueError:
+                continue
+    return None
+
+def _pdf_amount(text):
+    patterns = (
+        re.compile(r"(?:₹|INR|Rs\.?)\s*([+-]?\s*\d[\d,]*(?:\.\d{1,2})?)", re.I),
+        re.compile(r"\bamount(?:\s+paid)?\s*[:\-]?\s*(?:₹|INR|Rs\.?)?\s*([+-]?\s*\d[\d,]*(?:\.\d{1,2})?)", re.I),
+    )
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            value = _decimal(match.group(1))
+            if value is not None and value != 0:
+                return value
+    return None
+
+def _pdf_reference(text):
+    labeled = re.search(
+        r"(?:UPI\s*(?:transaction|txn)?\s*ID|UTR|RRN|reference\s*ID|transaction\s*ID)\s*[:#\-]?\s*([A-Za-z0-9\-]{6,40})",
+        text,
+        re.I,
+    )
+    if labeled:
+        return _reference(labeled.group(1))
+
+    if re.search(r"\b(?:UPI|UTR|RRN|reference)\b", text, re.I):
+        numeric = re.search(r"(?<!\d)(\d{9,18})(?!\d)", text)
+        if numeric:
+            return numeric.group(1)
+    return None
+
+def _pdf_merchant(lines, label):
+    prefixes = (
+        "paid to", "sent to", "received from", "merchant",
+        "payee", "recipient", "payment to"
+    )
+    for index, line in enumerate(lines):
+        normalized = _norm(line)
+        for prefix in prefixes:
+            if normalized.startswith(prefix):
+                remainder = re.sub(
+                    rf"^\s*{re.escape(prefix)}\s*[:\-]?\s*",
+                    "",
+                    line,
+                    flags=re.I,
+                ).strip()
+                if remainder and _norm(remainder) != prefix:
+                    return remainder[:160]
+                if index + 1 < len(lines):
+                    candidate = lines[index + 1].strip()
+                    if candidate and not _pdf_date(candidate) and _pdf_amount(candidate) is None:
+                        return candidate[:160]
+    return label
+
+def _pdf_rows(content: bytes, app: str):
+    label = app_label(app)
+    try:
+        reader = PdfReader(io.BytesIO(content))
+    except Exception as exc:
+        raise ValueError("Could not open this PDF statement") from exc
+
+    page_text = []
+    for page in reader.pages:
+        try:
+            page_text.append(page.extract_text() or "")
+        except Exception:
+            page_text.append("")
+
+    text = "\n".join(page_text).strip()
+    if not text:
+        raise ValueError(
+            "This PDF does not contain selectable text. "
+            "Please export a searchable PDF/e-statement instead of a scanned image PDF."
+        )
+
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
+    starts = []
+    for index, line in enumerate(lines):
+        lowered = _norm(line)
+        if any(word in lowered for word in ("statement period", "statement from", "from date", "to date")):
+            continue
+        txn_at = _pdf_date(line)
+        if txn_at:
+            starts.append((index, txn_at))
+
+    rows = []
+    for pos, (start_index, txn_at) in enumerate(starts):
+        end_index = starts[pos + 1][0] if pos + 1 < len(starts) else min(len(lines), start_index + 14)
+        block_lines = lines[start_index:end_index]
+        block = "\n".join(block_lines)
+
+        if not _status_ok(block):
+            continue
+
+        amount = _pdf_amount(block)
+        direction = _direction(block)
+        if amount is None or amount == 0 or direction is None:
+            continue
+
+        reference = _pdf_reference(block)
+        merchant = _pdf_merchant(block_lines, label)
+        rows.append({
+            "txn_at": txn_at,
+            "amount": abs(amount),
+            "direction": direction,
+            "description": block[:2000],
+            "merchant": merchant,
+            "upi_ref": reference,
+            "source_app": app,
+            "source_label": label,
+        })
+
+    if not rows:
+        raise ValueError(
+            "Ledger could read this PDF, but could not identify supported UPI transaction rows. "
+            "Use the app's transaction-history statement PDF, or upload CSV/XLSX/XLS/JSON."
+        )
+
+    return rows
+
 def normalize_upi_rows(rows, app: str):
     label = app_label(app)
     out = []
@@ -297,4 +434,7 @@ def parse_upi_statement(app: str, name: str, content: bytes):
             raise ValueError("Invalid JSON export") from exc
         return normalize_upi_rows(_collect_json_rows(payload), app)
 
-    raise ValueError("UPI app import supports CSV, XLSX, XLS and JSON files")
+    if lower.endswith(".pdf"):
+        return _pdf_rows(content, app)
+
+    raise ValueError("UPI app import supports CSV, XLSX, XLS, JSON and PDF files")
