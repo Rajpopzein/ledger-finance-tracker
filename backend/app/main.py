@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, FamilyMember, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User
-from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin, FamilySignup
+from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User
+from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
