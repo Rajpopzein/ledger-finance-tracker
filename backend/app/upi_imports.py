@@ -85,7 +85,8 @@ def _classify(db: Session, user_id: int, row):
             return exact, "upi_ref", 1.0, "existing"
 
     # Reuse the deterministic matcher across every real account owned by the user.
-    # UPI • Unassigned is excluded because it is the fallback destination.
+    # Do not stop on a fuzzy hit because a later account may contain an exact match.
+    review_candidate = None
     for account in _user_accounts(db, user_id):
         if account.type == "upi" and account.institution == "UPI":
             continue
@@ -101,8 +102,12 @@ def _classify(db: Session, user_id: int, row):
         )
         if match and method in ("upi_ref", "bank_ref", "fingerprint"):
             return match, method, score, "existing"
-        if match:
-            return match, method, score, "review"
+        if match and (review_candidate is None or score > review_candidate[2]):
+            review_candidate = (match, method, score)
+
+    if review_candidate:
+        match, method, score = review_candidate
+        return match, method, score, "review"
 
     start = row["txn_at"] - timedelta(days=1)
     end = row["txn_at"] + timedelta(days=1)
