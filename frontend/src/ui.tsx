@@ -158,7 +158,7 @@ export function useUI(){
 export const claySx=(mode:'light'|'dark')=>({
   border:'1px solid',
   borderColor:'divider',
-  borderRadius:2.25,
+  borderRadius:1.75,
   background:mode==='dark'
     ? 'linear-gradient(145deg, rgba(31,38,47,.95), rgba(17,22,28,.96))'
     : 'linear-gradient(145deg, rgba(255,255,255,.98), rgba(232,239,235,.98))',
