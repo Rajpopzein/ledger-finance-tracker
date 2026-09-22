@@ -1,13 +1,23 @@
+import {useEffect,useState} from 'react'
 import {NavLink,Outlet} from 'react-router-dom'
 import {PeriodProvider,usePeriod} from '../period'
 import {FamilyProvider,useFamily} from '../family'
 import {api} from '../api/client'
 
-const nav=[['/','Overview'],['/transactions','Transactions'],['/import','Import & Review'],['/ai','AI Insights'],['/settings','Settings']]
+const ownerNav=[['/','Overview'],['/transactions','Transactions'],['/import','Import & Review'],['/ai','AI Insights'],['/settings','Settings']]
+const familyNav=[['/','Overview'],['/transactions','Transactions']]
 
 function Shell(){
   const {period,setPeriodKey,options}=usePeriod()
   const {scopeKey,setScopeKey,members,scopeLabel}=useFamily()
+  const [auth,setAuth]=useState<any>(null)
+
+  useEffect(()=>{api.authStatus().then(setAuth).catch(()=>setAuth(null))},[])
+
+  const isFamily=auth?.role==='family'
+  const nav=isFamily?familyNav:ownerNav
+  const profileName=isFamily?(auth?.family_member_name||'Family member'):'Owner'
+  const profileInitial=(profileName?.[0]||'R').toUpperCase()
 
   async function signOut(){
     try{await api.logout()}finally{window.location.replace('/')}
@@ -20,8 +30,8 @@ function Shell(){
         <nav>{nav.map(([to,label])=><NavLink key={to} to={to} end={to==='/'} className={({isActive})=>`nav ${isActive?'active':''}`}>{label}</NavLink>)}</nav>
       </div>
       <div className="profile">
-        <div className="avatar">R</div>
-        <div className="profile-copy"><strong>Owner</strong><small>Private ledger</small></div>
+        <div className="avatar">{profileInitial}</div>
+        <div className="profile-copy"><strong>{profileName}</strong><small>{isFamily?'Family ledger':'Private ledger'}</small></div>
         <button className="ghost signout" onClick={signOut}>Sign out</button>
       </div>
     </aside>
@@ -42,7 +52,7 @@ function Shell(){
             {options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
 
-          <select
+          {!isFamily&&<select
             className="family-scope-select"
             value={scopeKey}
             onChange={e=>setScopeKey(e.target.value)}
@@ -52,10 +62,12 @@ function Shell(){
             <option value="family">Family</option>
             <option value="all">Self + Family</option>
             {members.map(member=><option key={member.id} value={`member:${member.id}`}>{member.name}</option>)}
-          </select>
+          </select>}
+
+          {isFamily&&<span className="family-login-label">{profileName}</span>}
         </div>
 
-        <span className="date">{period.rangeLabel} • {scopeLabel}</span>
+        <span className="date">{period.rangeLabel} • {isFamily?profileName:scopeLabel}</span>
       </header>
       <main><Outlet/></main>
     </div>
