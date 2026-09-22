@@ -69,6 +69,15 @@ class ImportBatch(Base):
     status: Mapped[str] = mapped_column(String(30), default="previewed")
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
+class ImportPreview(Base):
+    __tablename__ = "import_previews"
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    file_hash: Mapped[str] = mapped_column(String(64), index=True)
+    payload_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class AISetting(Base):
     __tablename__ = "ai_settings"
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
