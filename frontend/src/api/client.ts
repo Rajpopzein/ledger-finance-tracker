@@ -59,15 +59,41 @@ export const api={
    if(familyMemberId)p.set('family_user_id',String(familyMemberId))
    return req<any>(`/summary?${p.toString()}`)
  },
- transactions:(q='',from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
+ transactions:(opts:{
+   q?:string
+   from?:string
+   to?:string
+   familyScope?:string
+   familyUserId?:number
+   accountId?:number
+   status?:string
+   direction?:'debit'|'credit'
+   page?:number
+   pageSize?:number
+ }={})=>{
    const p=new URLSearchParams()
-   if(q)p.set('q',q)
-   if(from)p.set('from_date',from)
-   if(to)p.set('to_date',to)
-   p.set('family_scope',familyScope)
-   if(familyMemberId)p.set('family_user_id',String(familyMemberId))
-   const s=p.toString()
-   return req<any[]>(`/transactions${s?`?${s}`:''}`)
+   if(opts.q)p.set('q',opts.q)
+   if(opts.from)p.set('from_date',opts.from)
+   if(opts.to)p.set('to_date',opts.to)
+   p.set('family_scope',opts.familyScope||'self')
+   if(opts.familyUserId)p.set('family_user_id',String(opts.familyUserId))
+   if(opts.accountId)p.set('account_id',String(opts.accountId))
+   if(opts.status)p.set('status',opts.status)
+   if(opts.direction)p.set('direction',opts.direction)
+   p.set('page',String(opts.page||1))
+   p.set('page_size',String(opts.pageSize||25))
+   return req<any>(`/transactions?${p.toString()}`)
+ },
+ aiCategorize:(transactionIds:number[])=>req<any>('/transactions/ai-categorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transaction_ids:transactionIds})}),
+ undoCategory:(txId:number)=>req<any>(`/transactions/${txId}/category/undo`,{method:'POST'}),
+ debts:()=>req<any>('/debts'),
+ createDebt:(body:any)=>req<any>('/debts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ updateDebt:(debtId:number,body:any)=>req<any>(`/debts/${debtId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ addDebtPayment:(debtId:number,body:any)=>req<any>(`/debts/${debtId}/payments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ debtAIPreview:(file:File)=>{
+   const f=new FormData()
+   f.append('file',file)
+   return req<any>('/debts/ai-preview',{method:'POST',body:f})
  },
  accounts:()=>req<any[]>('/accounts'),
  createAccount:(body:any)=>req<any>('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
