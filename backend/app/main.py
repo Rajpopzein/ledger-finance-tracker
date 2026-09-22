@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner
+from .models import Account, Category, FamilyMember, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner
 from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -22,6 +22,7 @@ from .services.secrets import encrypt
 from .services.ai import ask_model
 from .upi_imports import router as upi_imports_router
 from .bank_imports import router as bank_imports_router
+from .family import router as family_router
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -34,6 +35,7 @@ from .services.auth import (
 app = FastAPI(title="Ledger v1 API")
 app.include_router(upi_imports_router)
 app.include_router(bank_imports_router)
+app.include_router(family_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
@@ -178,16 +180,38 @@ def _bounds(from_date:date|None,to_date:date|None):
     )
     return start,end
 
-def _filtered_stmt(from_date:date|None,to_date:date|None):
+def _filtered_stmt(
+    from_date:date|None,
+    to_date:date|None,
+    family_scope:str="self",
+    family_member_id:int|None=None,
+):
     stmt=select(Transaction)
     start,end=_bounds(from_date,to_date)
     if start is not None: stmt=stmt.where(Transaction.txn_at>=start)
     if end is not None: stmt=stmt.where(Transaction.txn_at<end)
+
+    if family_member_id is not None:
+        stmt=stmt.where(Transaction.family_member_id==family_member_id)
+    elif family_scope=="self":
+        stmt=stmt.where(Transaction.family_member_id.is_(None))
+    elif family_scope=="family":
+        stmt=stmt.where(Transaction.family_member_id.is_not(None))
+    elif family_scope!="all":
+        raise HTTPException(400,"family_scope must be self, family or all")
     return stmt
 
 @app.get("/api/transactions")
-def transactions(q:str|None=None, status:str|None=None, from_date:date|None=None, to_date:date|None=None, db:Session=Depends(get_db)):
-    stmt=_filtered_stmt(from_date,to_date).order_by(Transaction.txn_at.desc()).limit(500)
+def transactions(
+    q:str|None=None,
+    status:str|None=None,
+    from_date:date|None=None,
+    to_date:date|None=None,
+    family_scope:str="self",
+    family_member_id:int|None=None,
+    db:Session=Depends(get_db),
+):
+    stmt=_filtered_stmt(from_date,to_date,family_scope,family_member_id).order_by(Transaction.txn_at.desc()).limit(500)
     items=db.scalars(stmt).all()
     if q:
         needle=q.lower(); items=[t for t in items if needle in (t.merchant or "").lower() or needle in (t.description_raw or "").lower() or needle in (t.bank_ref or "").lower() or needle in (t.upi_ref or "").lower()]
@@ -195,7 +219,25 @@ def transactions(q:str|None=None, status:str|None=None, from_date:date|None=None
     return [serialize_tx(t) for t in items]
 
 def serialize_tx(t):
-    return {"id":t.id,"txn_at":t.txn_at.isoformat(),"amount":float(t.amount),"direction":t.direction,"txn_type":t.txn_type,"merchant":t.merchant,"description":t.description_raw,"payment_method":t.payment_method,"verification_status":t.verification_status,"excluded":t.excluded_from_analytics,"account":t.account.name if t.account else "Cash","category":t.category.name if t.category else "Uncategorized","sources":[{"type":src.source_type,"name":src.source_name} for src in t.sources]}
+    return {
+        "id":t.id,
+        "txn_at":t.txn_at.isoformat(),
+        "amount":float(t.amount),
+        "direction":t.direction,
+        "txn_type":t.txn_type,
+        "merchant":t.merchant,
+        "description":t.description_raw,
+        "payment_method":t.payment_method,
+        "verification_status":t.verification_status,
+        "excluded":t.excluded_from_analytics,
+        "account":t.account.name if t.account else "Cash",
+        "category":t.category.name if t.category else "Uncategorized",
+        "family_member":(
+            {"id":t.family_member.id,"member_code":t.family_member.member_code,"name":t.family_member.name}
+            if t.family_member else None
+        ),
+        "sources":[{"type":src.source_type,"name":src.source_name} for src in t.sources],
+    }
 
 @app.post("/api/transactions/cash")
 def create_cash(body:CashTransactionCreate, db:Session=Depends(get_db)):
@@ -246,8 +288,17 @@ def exclude(tx_id:int, db:Session=Depends(get_db)):
     return {"id":tx.id,"excluded":tx.excluded_from_analytics}
 
 @app.get("/api/summary")
-def summary(from_date:date|None=None, to_date:date|None=None, db:Session=Depends(get_db)):
-    items=db.scalars(_filtered_stmt(from_date,to_date).where(Transaction.excluded_from_analytics==False)).all()
+def summary(
+    from_date:date|None=None,
+    to_date:date|None=None,
+    family_scope:str="self",
+    family_member_id:int|None=None,
+    db:Session=Depends(get_db),
+):
+    items=db.scalars(
+        _filtered_stmt(from_date,to_date,family_scope,family_member_id)
+        .where(Transaction.excluded_from_analytics==False)
+    ).all()
     income=sum((t.amount for t in items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
     spent=sum((t.amount for t in items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
     verified=sum(1 for t in items if t.verification_status=="verified")
@@ -265,11 +316,57 @@ def summary(from_date:date|None=None, to_date:date|None=None, db:Session=Depends
         while m<=0: y-=1; m+=12
         month_start=date(y,m,1)
         next_month=date(y+1,1,1) if m==12 else date(y,m+1,1)
-        month_items=db.scalars(_filtered_stmt(month_start,next_month-timedelta(days=1)).where(Transaction.excluded_from_analytics==False)).all()
+        month_items=db.scalars(
+            _filtered_stmt(
+                month_start,
+                next_month-timedelta(days=1),
+                family_scope,
+                family_member_id,
+            ).where(Transaction.excluded_from_analytics==False)
+        ).all()
         m_income=sum((t.amount for t in month_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
         m_spent=sum((t.amount for t in month_items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
         months.append({"label":month_start.strftime("%b"),"income":float(m_income),"spent":float(m_spent)})
-    return {"income":float(income),"spent":float(spent),"available":float(income-spent),"verified":verified,"total":len(items),"needs_review":review,"categories":[{"name":k,"amount":float(v)} for k,v in sorted(cats.items(),key=lambda x:x[1],reverse=True)],"cashflow":months}
+    family_items=db.scalars(
+        _filtered_stmt(from_date,to_date,"all",None)
+        .where(Transaction.excluded_from_analytics==False)
+    ).all()
+    family_totals=defaultdict(Decimal)
+    family_meta={}
+    for t in family_items:
+        if t.direction!="debit" or t.txn_type in ("internal_transfer","investment"):
+            continue
+        if t.family_member:
+            key=f"member:{t.family_member.id}"
+            family_meta[key]={
+                "id":t.family_member.id,
+                "member_code":t.family_member.member_code,
+                "name":t.family_member.name,
+            }
+        else:
+            key="self"
+            family_meta[key]={"id":None,"member_code":"SELF","name":"Self"}
+        family_totals[key]+=t.amount
+
+    family_spending=[
+        {
+            **family_meta[key],
+            "amount":float(amount),
+        }
+        for key,amount in sorted(family_totals.items(),key=lambda x:x[1],reverse=True)
+    ]
+
+    return {
+        "income":float(income),
+        "spent":float(spent),
+        "available":float(income-spent),
+        "verified":verified,
+        "total":len(items),
+        "needs_review":review,
+        "categories":[{"name":k,"amount":float(v)} for k,v in sorted(cats.items(),key=lambda x:x[1],reverse=True)],
+        "cashflow":months,
+        "family_spending":family_spending,
+    }
 
 @app.post("/api/imports/preview")
 async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Session=Depends(get_db)):
