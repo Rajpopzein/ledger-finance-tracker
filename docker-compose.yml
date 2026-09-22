@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ledger
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+    volumes:
+      - ledger_db_v11:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://ledger:ledger@db:5432/ledger
+      CORS_ORIGINS: http://localhost:5173
+      SECRET_KEY_PATH: /data/secret.key
+    volumes:
+      - ./backend/app:/app/app
+      - ledger_secrets:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+    volumes:
+      - ./frontend/src:/app/src
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+volumes:
+  ledger_db_v11:
+  ledger_secrets:
