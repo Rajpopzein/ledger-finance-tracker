@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, Depends, File, Form, HTTPException, UploadFile, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -277,29 +277,51 @@ def transactions(
     request:Request,
     q:str|None=None,
     status:str|None=None,
+    direction:str|None=None,
+    account_id:int|None=None,
     from_date:date|None=None,
     to_date:date|None=None,
     family_scope:str="self",
     family_user_id:int|None=None,
+    page:int=1,
+    page_size:int=25,
     db:Session=Depends(get_db),
 ):
     user_ids=_scope_user_ids(request,db,family_scope,family_user_id)
-    stmt=_filtered_stmt(from_date,to_date,user_ids).order_by(Transaction.txn_at.desc()).limit(500)
-    items=db.scalars(stmt).all()
-    if q:
-        needle=q.lower()
-        items=[
-            t for t in items
-            if needle in (t.merchant or "").lower()
-            or needle in (t.description_raw or "").lower()
-            or needle in (t.bank_ref or "").lower()
-            or needle in (t.upi_ref or "").lower()
-            or needle in (t.user.name if t.user else "").lower()
-            or needle in (t.user.handle if t.user else "").lower()
-        ]
+    page=max(1,page)
+    page_size=max(10,min(100,page_size))
+    stmt=_filtered_stmt(from_date,to_date,user_ids)
+
+    if account_id is not None:
+        stmt=stmt.where(Transaction.account_id==account_id)
     if status:
-        items=[t for t in items if t.verification_status==status]
-    return [serialize_tx(t) for t in items]
+        stmt=stmt.where(Transaction.verification_status==status)
+    if direction in ("debit","credit"):
+        stmt=stmt.where(Transaction.direction==direction)
+    if q:
+        needle=q.strip().lower()
+        if needle:
+            stmt=stmt.where(or_(
+                func.lower(func.coalesce(Transaction.merchant,"")).contains(needle),
+                func.lower(func.coalesce(Transaction.description_raw,"")).contains(needle),
+            ))
+
+    count_stmt=select(func.count()).select_from(stmt.order_by(None).subquery())
+    total=int(db.scalar(count_stmt) or 0)
+    items=db.scalars(
+        stmt.order_by(Transaction.txn_at.desc(),Transaction.id.desc())
+        .offset((page-1)*page_size)
+        .limit(page_size)
+    ).all()
+    pages=max(1,(total+page_size-1)//page_size)
+
+    return {
+        "items":[serialize_tx(t) for t in items],
+        "page":page,
+        "page_size":page_size,
+        "total":total,
+        "pages":pages,
+    }
 
 def serialize_tx(t):
     return {
@@ -313,8 +335,12 @@ def serialize_tx(t):
         "payment_method":t.payment_method,
         "verification_status":t.verification_status,
         "excluded":t.excluded_from_analytics,
+        "account_id":t.account.id if t.account else None,
         "account":t.account.name if t.account else "Cash",
+        "institution":t.account.institution if t.account else "Cash",
         "category":t.category.name if t.category else "Uncategorized",
+        "category_source":t.category_source,
+        "can_undo_category":bool(t.category_undo_available and t.category_source=="ai"),
         "user":(
             {"id":t.user.id,"name":t.user.name,"handle":f"@{t.user.handle}"}
             if t.user else None
@@ -389,7 +415,7 @@ def summary(
         _filtered_stmt(from_date,to_date,user_ids)
         .where(Transaction.excluded_from_analytics==False)
     ).all()
-    income=sum((t.amount for t in items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
+    income=sum((t.amount for t in items if t.direction=="credit"),Decimal("0"))
     spent=sum((t.amount for t in items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
     verified=sum(1 for t in items if t.verification_status=="verified")
     review=sum(1 for t in items if t.verification_status=="needs_review")
@@ -413,7 +439,7 @@ def summary(
                 user_ids,
             ).where(Transaction.excluded_from_analytics==False)
         ).all()
-        m_income=sum((t.amount for t in month_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
+        m_income=sum((t.amount for t in month_items if t.direction=="credit"),Decimal("0"))
         m_spent=sum((t.amount for t in month_items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
         months.append({"label":month_start.strftime("%b"),"income":float(m_income),"spent":float(m_spent)})
     family_items=db.scalars(
