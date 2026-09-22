@@ -162,9 +162,17 @@ def categories(db:Session=Depends(get_db)):
     existing={c.name:c.id for c in db.scalars(select(Category).order_by(Category.name)).all()}
     return [{"id":existing.get(name),"name":name} for name in DEFAULT_CATEGORIES] + [{"id":cid,"name":name} for name,cid in existing.items() if name not in DEFAULT_CATEGORIES]
 
+INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
+
 def _bounds(from_date:date|None,to_date:date|None):
-    start=datetime.combine(from_date,time.min,tzinfo=timezone.utc) if from_date else None
-    end=datetime.combine(to_date + timedelta(days=1),time.min,tzinfo=timezone.utc) if to_date else None
+    start=(
+        datetime.combine(from_date,time.min,tzinfo=INDIA_TZ).astimezone(timezone.utc)
+        if from_date else None
+    )
+    end=(
+        datetime.combine(to_date + timedelta(days=1),time.min,tzinfo=INDIA_TZ).astimezone(timezone.utc)
+        if to_date else None
+    )
     return start,end
 
 def _filtered_stmt(from_date:date|None,to_date:date|None):
@@ -245,7 +253,7 @@ def summary(from_date:date|None=None, to_date:date|None=None, db:Session=Depends
     for t in items:
         if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment"):
             cats[t.category.name if t.category else "Uncategorized"] += t.amount
-    anchor=to_date or date.today()
+    anchor=to_date or datetime.now(INDIA_TZ).date()
     anchor=date(anchor.year,anchor.month,1)
     months=[]
     for offset in range(5,-1,-1):
