@@ -54,6 +54,7 @@ FINANCE_TERMS = {
     "payments","bill","bills","rent","investment","investments","category","categories",
     "merchant","due","lender","principal","outstanding","repay","repayment","cashflow",
     "cash flow","net worth","credit card","subscription","subscriptions","groceries","fuel",
+    "pay","payoff","pay off","owe","owing","buy","purchase","repayment plan","debt plan",
 }
 
 SENSITIVE_PATTERNS = [
