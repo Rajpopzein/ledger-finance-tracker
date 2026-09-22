@@ -37,6 +37,7 @@ const dateQs=(from?:string,to?:string)=>{
 export const api={
  authStatus:()=>req<any>('/auth/status'),
  setupOwner:(email:string,password:string)=>req<any>('/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
+ signup:(name:string,handle:string,email:string,password:string)=>req<any>('/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,handle,email,password})}),
  login:(email:string,password:string)=>req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
  familySignup:(memberCode:string,email:string,password:string)=>req<any>('/auth/family-signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({member_code:memberCode,email,password})}),
  logout:()=>req<any>('/auth/logout',{method:'POST'}),
@@ -45,7 +46,7 @@ export const api={
    if(from)p.set('from_date',from)
    if(to)p.set('to_date',to)
    p.set('family_scope',familyScope)
-   if(familyMemberId)p.set('family_member_id',String(familyMemberId))
+   if(familyMemberId)p.set('family_user_id',String(familyMemberId))
    return req<any>(`/summary?${p.toString()}`)
  },
  transactions:(q='',from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
@@ -54,16 +55,19 @@ export const api={
    if(from)p.set('from_date',from)
    if(to)p.set('to_date',to)
    p.set('family_scope',familyScope)
-   if(familyMemberId)p.set('family_member_id',String(familyMemberId))
+   if(familyMemberId)p.set('family_user_id',String(familyMemberId))
    const s=p.toString()
    return req<any[]>(`/transactions${s?`?${s}`:''}`)
  },
  accounts:()=>req<any[]>('/accounts'),
  createAccount:(body:any)=>req<any>('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  categories:()=>req<any[]>('/categories'),
- familyMembers:()=>req<any[]>('/family-members'),
- createFamilyMember:(body:{member_code:string;name:string})=>req<any>('/family-members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- tagTransactionFamily:(txId:number,familyMemberId:number|null)=>req<any>(`/transactions/${txId}/family-member`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({family_member_id:familyMemberId})}),
+ profile:()=>req<any>('/profile'),
+ updateProfile:(body:{name:string;handle:string;phone?:string|null})=>req<any>('/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ familyNetwork:()=>req<any>('/family-network'),
+ linkFamily:(handle:string,label?:string)=>req<any>('/family-links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({handle,label:label||null})}),
+ familyLinkAction:(linkId:number,action:'accept'|'reject')=>req<any>(`/family-links/${linkId}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
+ removeFamilyLink:(linkId:number)=>req<any>(`/family-links/${linkId}`,{method:'DELETE'}),
  cash:(body:any)=>req('/transactions/cash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  preview:(accountId:number,file:File)=>{
    const f=new FormData()
