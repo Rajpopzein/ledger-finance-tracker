@@ -23,6 +23,7 @@ from .services.ai import ask_model
 from .upi_imports import router as upi_imports_router
 from .bank_imports import router as bank_imports_router
 from .finance_features import router as finance_features_router
+from .shortcuts import router as shortcuts_router
 from .users import router as users_router, linked_user_ids, current_user_id
 from .services.auth import (
     SESSION_COOKIE,
@@ -37,6 +38,7 @@ app.include_router(upi_imports_router)
 app.include_router(bank_imports_router)
 app.include_router(users_router)
 app.include_router(finance_features_router)
+app.include_router(shortcuts_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
@@ -52,6 +54,7 @@ PUBLIC_API_PATHS = {
     "/api/auth/login",
     "/api/auth/signup",
     "/api/auth/logout",
+    "/api/shortcuts/transaction",
 }
 
 def _origin_allowed(request: Request, origin: str) -> bool:
