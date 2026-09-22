@@ -18,11 +18,18 @@ export default function AIInsights(){
   const {period}=usePeriod()
   const {resolvedMode}=useUI()
   const [settings,setSettings]=useState<any>({status:'not_configured'})
-  const [q,setQ]=useState('Where did I spend more this month?')
+  const [q,setQ]=useState(()=>sessionStorage.getItem('ledger_ai_prompt')||'Where did I spend more this month?')
   const [answer,setAnswer]=useState('')
   const [busy,setBusy]=useState(false)
 
-  useEffect(()=>{api.aiSettings().then(setSettings)},[])
+  useEffect(()=>{
+    api.aiSettings().then(setSettings)
+    const saved=sessionStorage.getItem('ledger_ai_prompt')
+    if(saved){
+      setQ(saved)
+      sessionStorage.removeItem('ledger_ai_prompt')
+    }
+  },[])
 
   async function ask(){
     setBusy(true)
@@ -47,14 +54,14 @@ export default function AIInsights(){
           color={settings.status==='configured'?'primary':'default'}
           label={settings.status==='configured'?(settings.provider==='local'?'Local AI':'Gemini'):'AI not configured'}
         />
-        <Typography variant="body2" color="text.secondary">AI can analyze and explain your finances, but it cannot modify transactions.</Typography>
+        <Typography variant="body2" color="text.secondary">Finance-only assistant: spending, income, budgets, debt, EMI and cash flow. Coding and general-knowledge requests are rejected.</Typography>
       </Stack>
     </Paper>
 
     <Box>
       <Typography variant="overline" color="text.secondary">READ-ONLY</Typography>
       <Typography variant="h1">AI Insights</Typography>
-      <Typography color="text.secondary" sx={{mt:.6}}>Exact calculations come from the finance service; AI only explains them.</Typography>
+      <Typography color="text.secondary" sx={{mt:.6}}>Exact calculations come from Ledger. Account numbers, IFSC codes, UPI IDs and raw statements are never included in this chat context.</Typography>
     </Box>
 
     <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
@@ -64,7 +71,7 @@ export default function AIInsights(){
             fullWidth
             value={q}
             onChange={e=>setQ(e.target.value)}
-            placeholder="Ask about your finances…"
+            placeholder="Ask about spending, income, budgets or debt…"
           />
           <Button
             variant="contained"
@@ -80,7 +87,8 @@ export default function AIInsights(){
           {[
             'Compare this month with last month',
             'Find unusual expenses',
-            'Where is most of my spending going?'
+            'Where is most of my spending going?',
+            'How can I improve my finances and reduce debt?'
           ].map(prompt=><Chip key={prompt} label={prompt} onClick={()=>setQ(prompt)} variant="outlined"/>)}
         </Stack>
 
