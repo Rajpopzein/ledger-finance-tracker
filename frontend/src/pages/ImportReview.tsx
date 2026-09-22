@@ -1,2 +1,121 @@
-import {useEffect,useState} from 'react';import {Link} from 'react-router-dom';import {api} from '../api/client'
-export default function ImportReview(){const [accounts,setAccounts]=useState<any[]>([]);const [account,setAccount]=useState<number|undefined>();const [preview,setPreview]=useState<any>(null);const [busy,setBusy]=useState(false);useEffect(()=>{api.accounts().then(a=>{const banks=a.filter((x:any)=>x.type==='bank');setAccounts(banks);setAccount(banks[0]?.id)})},[]);async function pick(file:File){if(!account)return;setBusy(true);try{setPreview(await api.preview(account,file))}finally{setBusy(false)}}async function commit(){if(!preview?.preview_token)return;setBusy(true);const r=await api.commit(preview.preview_token);setPreview({...preview,committed:r});setBusy(false)}return <><div className="page-head"><div><small>SAFE IMPORT</small><h1>Import bank statement</h1><p>CSV and XLSX only in v1. We validate duplicates before anything enters the ledger.</p></div></div><div className="gridImport"><section><div className="upload card">{accounts.length?<><select value={account||''} onChange={e=>setAccount(Number(e.target.value))}>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select><label className="drop"><b>{busy?'Processing…':'Choose statement'}</b><span>CSV or XLSX</span><input type="file" accept=".csv,.xlsx" disabled={busy} onChange={e=>e.target.files?.[0]&&pick(e.target.files[0])}/></label></>:<div className="empty"><b>No bank account configured.</b><br/>Add your bank account in Settings before importing a statement.<div style={{marginTop:14}}><Link className="secondary" to="/settings">Open Settings</Link></div></div>}</div>{preview&&<div className="card"><h2>Import preview</h2>{preview.already_imported?<div className="attention">This exact statement was already imported. Nothing will be added.</div>:<><div className="preview-grid"><div><small>FOUND</small><b>{preview.detected}</b></div><div><small>NEW</small><b>{preview.new}</b></div><div><small>MATCHED</small><b>{preview.matched}</b></div><div><small>REVIEW</small><b>{preview.review}</b></div></div>{preview.committed?<div className="success">Imported {preview.committed.inserted} new transactions and verified {preview.committed.matched} existing records.</div>:<button className="primary" onClick={commit} disabled={busy}>Add {preview.new} new transactions</button>}</>}</div>}</section><aside className="card"><h2>Duplicate protection</h2><div className="steps"><div><b>1</b><span>Normalize statement rows</span></div><div><b>2</b><span>Match bank/UPI references</span></div><div><b>3</b><span>Check deterministic fingerprint</span></div><div><b>4</b><span>Send uncertain matches to review</span></div><div><b>5</b><span>Add only genuinely new ledger entries</span></div></div><p className="muted">The same transaction can appear in multiple sources without becoming multiple expenses.</p></aside></div></>}
+import {useEffect,useState} from 'react'
+import {Link} from 'react-router-dom'
+import {api} from '../api/client'
+
+export default function ImportReview(){
+  const [accounts,setAccounts]=useState<any[]>([])
+  const [account,setAccount]=useState<number|undefined>()
+  const [preview,setPreview]=useState<any>(null)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+
+  useEffect(()=>{
+    api.accounts().then(a=>{
+      const banks=a.filter((x:any)=>x.type==='bank')
+      setAccounts(banks)
+      setAccount(banks[0]?.id)
+    })
+  },[])
+
+  async function pick(file:File){
+    if(!account)return
+    setBusy(true)
+    setPreview(null)
+    setError('')
+    try{
+      setPreview(await api.preview(account,file))
+    }catch(e:any){
+      setError(e.message||'Could not parse this statement.')
+    }finally{
+      setBusy(false)
+    }
+  }
+
+  async function commit(){
+    if(!preview?.preview_token)return
+    setBusy(true)
+    setError('')
+    try{
+      const r=await api.commit(preview.preview_token)
+      setPreview({...preview,committed:r})
+    }catch(e:any){
+      setError(e.message||'Could not import this statement.')
+    }finally{
+      setBusy(false)
+    }
+  }
+
+  return <>
+    <div className="page-head">
+      <div>
+        <small>SAFE IMPORT</small>
+        <h1>Import bank statement</h1>
+        <p>CSV and XLSX only in v1. We validate duplicates before anything enters the ledger.</p>
+      </div>
+    </div>
+
+    <div className="gridImport">
+      <section>
+        <div className="upload card">
+          {accounts.length
+            ? <>
+                <select value={account||''} onChange={e=>setAccount(Number(e.target.value))}>
+                  {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <label className="drop">
+                  <b>{busy?'Processing…':'Choose statement'}</b>
+                  <span>CSV or XLSX</span>
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx"
+                    disabled={busy}
+                    onChange={e=>e.target.files?.[0]&&pick(e.target.files[0])}
+                  />
+                </label>
+              </>
+            : <div className="empty">
+                <b>No bank account configured.</b><br/>
+                Add your bank account in Settings before importing a statement.
+                <div style={{marginTop:14}}>
+                  <Link className="secondary" to="/settings">Open Settings</Link>
+                </div>
+              </div>
+          }
+        </div>
+
+        {error&&<div className="attention">{error}</div>}
+
+        {preview&&<div className="card">
+          <h2>Import preview</h2>
+          {preview.already_imported
+            ? <div className="attention">This exact statement was already imported. Nothing will be added.</div>
+            : <>
+                <div className="preview-grid">
+                  <div><small>FOUND</small><b>{preview.detected}</b></div>
+                  <div><small>NEW</small><b>{preview.new}</b></div>
+                  <div><small>MATCHED</small><b>{preview.matched}</b></div>
+                  <div><small>REVIEW</small><b>{preview.review}</b></div>
+                </div>
+                {preview.committed
+                  ? <div className="success">Imported {preview.committed.inserted} new transactions and verified {preview.committed.matched} existing records.</div>
+                  : <button className="primary" onClick={commit} disabled={busy}>Add {preview.new} new transactions</button>
+                }
+              </>
+          }
+        </div>}
+      </section>
+
+      <aside className="card">
+        <h2>Duplicate protection</h2>
+        <div className="steps">
+          <div><b>1</b><span>Normalize statement rows</span></div>
+          <div><b>2</b><span>Match bank/UPI references</span></div>
+          <div><b>3</b><span>Check deterministic fingerprint</span></div>
+          <div><b>4</b><span>Send uncertain matches to review</span></div>
+          <div><b>5</b><span>Add only genuinely new ledger entries</span></div>
+        </div>
+        <p className="muted">The same transaction can appear in multiple sources without becoming multiple expenses.</p>
+      </aside>
+    </div>
+  </>
+}
