@@ -72,21 +72,10 @@ async def auth_guard(request: Request, call_next):
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
 
     request.state.auth = claims
+    if claims.get("role") not in {"user", "owner"}:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     if claims.get("role") == "owner" and int(claims.get("sub", 0)) != 1:
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
-
-    if claims.get("role") == "family":
-        allowed = (
-            request.method == "GET"
-            and (
-                path == "/api/summary"
-                or path == "/api/transactions"
-                or path == "/api/family-members"
-                or path == "/api/auth/status"
-            )
-        ) or path == "/api/auth/logout"
-        if not allowed:
-            return JSONResponse({"detail": "Owner access required"}, status_code=403)
 
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         origin = request.headers.get("origin")
