@@ -1,6 +1,14 @@
 from datetime import datetime, date
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+
+class OwnerSetup(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+
+class OwnerLogin(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
 
 class AccountCreate(BaseModel):
     institution: str = Field(min_length=1, max_length=100)
