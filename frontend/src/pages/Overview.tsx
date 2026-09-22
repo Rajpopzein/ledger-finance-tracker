@@ -115,7 +115,7 @@ function RecentCard({tx,mode,onAll}:{tx:Tx[];mode:'light'|'dark';onAll:()=>void}
         <Box sx={{minWidth:0}}>
           <Typography fontWeight={700} noWrap>{t.merchant||t.description||'Transaction'}</Typography>
           <Typography variant="caption" color="text.secondary" noWrap>{t.category} · {t.account}</Typography>
-          <Stack direction="row" gap=.6 sx={{mt:.6,flexWrap:'wrap'}}>
+          <Stack direction="row" gap={0.6} sx={{mt:.6,flexWrap:'wrap'}}>
             {t.user&&<Chip size="small" label={`${t.user.name} · ${t.user.handle}`} variant="outlined"/>}
             {upiLabel(t)&&<Chip size="small" label={upiLabel(t)} color="primary" variant="outlined"/>}
           </Stack>
