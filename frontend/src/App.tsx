@@ -6,6 +6,7 @@ import Transactions from './pages/Transactions'
 import ImportReview from './pages/ImportReview'
 import AIInsights from './pages/AIInsights'
 import Settings from './pages/Settings'
+import Profile from './pages/Profile'
 import Auth from './pages/Auth'
 import {api} from './api/client'
 
@@ -27,6 +28,7 @@ export default function App(){
       <Route path="/transactions" element={<Transactions/>}/>
       <Route path="/import" element={<ImportReview/>}/>
       <Route path="/ai" element={<AIInsights/>}/>
+      <Route path="/profile" element={<Profile/>}/>
       <Route path="/settings" element={<Settings/>}/>
     </Route>
   </Routes>
