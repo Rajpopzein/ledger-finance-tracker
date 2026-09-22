@@ -589,7 +589,7 @@ def save_ai_settings(body:AISettingsIn, request:Request, db:Session=Depends(get_
     user_id=current_user_id(request)
     s=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
     if not s:
-        s=AISetting(user_id=user_id)
+        s=AISetting(id=user_id,user_id=user_id)
     s.provider=body.provider;s.base_url=body.base_url;s.model=body.model;s.context_limit=body.context_limit;s.temperature=Decimal(str(body.temperature));s.allow_amounts=body.allow_amounts;s.allow_merchants=body.allow_merchants;s.allow_categories=body.allow_categories;s.allow_dates=body.allow_dates;s.allow_balances=body.allow_balances;s.allow_notes=body.allow_notes
     if body.api_key: s.api_key_encrypted=encrypt(body.api_key)
     db.add(s);db.commit();return {"ok":True}
