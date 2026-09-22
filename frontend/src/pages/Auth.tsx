@@ -4,7 +4,6 @@ import {
   Avatar,
   Box,
   Button,
-  InputAdornment,
   Paper,
   Stack,
   Tab,
@@ -15,6 +14,14 @@ import {
 import LockRoundedIcon from '@mui/icons-material/LockRounded'
 import {api} from '../api/client'
 import {claySx,useUI} from '../ui'
+
+function generateLedgerId(name:string){
+  const base=name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,10)||'user'
+  const buffer=new Uint32Array(1)
+  crypto.getRandomValues(buffer)
+  const suffix=String(buffer[0]%100000).padStart(5,'0')
+  return (base+suffix).slice(0,40)
+}
 
 export default function Auth({setupRequired,onAuthenticated}:{setupRequired:boolean;onAuthenticated:()=>void}){
   const {resolvedMode}=useUI()
@@ -34,6 +41,7 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     setError('')
     setPassword('')
     setConfirm('')
+    if(next==='signup')setHandle('')
   }
 
   async function submit(e:FormEvent){
@@ -42,7 +50,7 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
 
     if(signup){
       if(!name.trim())return setError('Enter your name.')
-      if(handle.trim().length<3)return setError('Choose a handle with at least 3 characters.')
+      if(handle.trim().length<3)return setError('Ledger ID could not be generated. Re-enter your name.')
       if(password!==confirm)return setError('Passwords do not match.')
       if(password.length<12)return setError('Use at least 12 characters.')
     }
@@ -53,7 +61,14 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
       await api.login(email,password)
       onAuthenticated()
     }catch(err:any){
-      setError(err.message||'Authentication failed')
+      const message=err.message||'Authentication failed'
+      if(signup&&String(message).toLowerCase().includes('handle')){
+        const nextId=generateLedgerId(name)
+        setHandle(nextId)
+        setError('A generated Ledger ID collision occurred. A new ID is ready; submit again.')
+      }else{
+        setError(message)
+      }
     }finally{
       setBusy(false)
     }
@@ -66,7 +81,7 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     bgcolor:'background.default',
     p:2,
   }}>
-    <Paper sx={{...claySx(resolvedMode),width:'100%',maxWidth:460,p:{xs:2.2,sm:3}}}>
+    <Paper sx={{...claySx(resolvedMode),width:'100%',maxWidth:440,p:{xs:1.6,sm:2.5}}}>
       <Stack direction="row" alignItems="center" spacing={1.2} sx={{mb:2}}>
         <Avatar sx={{bgcolor:'primary.main',fontWeight:850}}>₹</Avatar>
         <Box>
@@ -88,7 +103,7 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
       <Typography variant="overline" color="text.secondary">{signup?'CREATE ACCOUNT':'PRIVATE ACCESS'}</Typography>
       <Typography variant="h1" sx={{fontSize:'clamp(1.7rem,7vw,2.4rem)'}}>{signup?'Create your Ledger account':'Sign in'}</Typography>
       <Typography color="text.secondary" sx={{mt:.8,mb:2.2}}>
-        {signup?'Create your own account first. Link family members later using their @handle.':'Use your personal Ledger account.'}
+        {signup?'Create your account first. Ledger generates a permanent ID for family linking.':'Use your personal Ledger account.'}
       </Typography>
 
       <Box component="form" onSubmit={submit}>
@@ -99,18 +114,19 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
             autoComplete="name"
             required
             inputProps={{maxLength:100}}
-            onChange={e=>setName(e.target.value)}
+            onChange={e=>{
+              const next=e.target.value
+              setName(next)
+              if(!handle&&next.trim())setHandle(generateLedgerId(next))
+            }}
           />}
 
           {signup&&<TextField
-            label="Ledger ID / Handle"
-            value={handle}
-            required
-            inputProps={{maxLength:40}}
-            InputProps={{startAdornment:<InputAdornment position="start">@</InputAdornment>}}
-            placeholder="raj"
-            onChange={e=>setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,''))}
-            helperText="Unique ID used for family linking."
+            label="Ledger ID"
+            value={handle?'@'+handle:''}
+            disabled
+            placeholder="Generated after you enter your name"
+            helperText="System generated and cannot be changed from the app."
           />}
 
           <TextField
@@ -146,7 +162,7 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
             {busy?'Please wait…':signup?'Create account':'Sign in'}
           </Button>
 
-          <Stack direction="row" spacing={1} alignItems="flex-start" sx={{p:1.4,bgcolor:'action.hover',borderRadius:2.5}}>
+          <Stack direction="row" spacing={1} alignItems="flex-start" sx={{p:1.15,bgcolor:'action.hover',borderRadius:1.75}}>
             <LockRoundedIcon color="primary" fontSize="small"/>
             <Typography variant="caption" color="text.secondary">
               Independent account. Family linking never shares your password or merges your login.
