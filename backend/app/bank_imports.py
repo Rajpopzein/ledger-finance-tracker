@@ -1,15 +1,16 @@
 import hashlib
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import ImportBatch, Transaction, TransactionSource
+from .models import Account, ImportBatch, Transaction, TransactionSource
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
+from .users import current_user_id
 
 router = APIRouter()
 
@@ -64,10 +65,15 @@ def _classify(db: Session, account_id: int, row):
 
 @router.post("/api/imports/bank/commit")
 async def commit_bank_statement(
+    request: Request,
     account_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    user_id = current_user_id(request)
+    account = db.get(Account, account_id)
+    if not account or account.user_id != user_id:
+        raise HTTPException(404, "Account not found")
     content = await file.read()
     file_name = file.filename or "statement.csv"
     file_hash = hashlib.sha256(content).hexdigest()
@@ -152,6 +158,7 @@ async def commit_bank_statement(
             continue
 
         tx = Transaction(
+            user_id=user_id,
             account_id=account_id,
             txn_at=row["txn_at"],
             amount=amount,
