@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react'
-import {NavLink,Outlet,useLocation} from 'react-router-dom'
+import {NavLink,Outlet,useLocation,useNavigate} from 'react-router-dom'
 import {
   Avatar,
   Box,
@@ -22,6 +22,7 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded'
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
+import PhoneIphoneRoundedIcon from '@mui/icons-material/PhoneIphoneRounded'
 import {PeriodProvider,usePeriod} from '../period'
 import {FamilyProvider,useFamily} from '../family'
 import {api} from '../api/client'
@@ -47,12 +48,12 @@ function Shell(){
   const theme=useTheme()
   const desktop=useMediaQuery(theme.breakpoints.up('md'))
   const location=useLocation()
+  const navigate=useNavigate()
 
   useEffect(()=>{api.authStatus().then(setAuth).catch(()=>setAuth(null))},[])
 
   const profileName=auth?.name||'User'
   const profileHandle=auth?.handle||''
-  const profileInitial=(profileName?.[0]||'U').toUpperCase()
 
   async function signOut(){
     try{await api.logout()}finally{window.location.replace('/')}
@@ -105,7 +106,6 @@ function Shell(){
     <Divider sx={{my:1.75}}/>
 
     <Stack direction="row" alignItems="center" spacing={1.1} sx={{minWidth:0}}>
-      <Avatar sx={{width:38,height:38,bgcolor:'secondary.main'}}>{profileInitial}</Avatar>
       <Box sx={{minWidth:0,flex:1}}>
         <Typography sx={{fontWeight:700}} noWrap>{profileName}</Typography>
         <Typography variant="caption" color="text.secondary" noWrap>{profileHandle||'Private ledger'}</Typography>
@@ -161,21 +161,27 @@ function Shell(){
         }}
       >
         {!desktop&&<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{mb:1}}>
-          <Stack direction="row" alignItems="center" spacing={1}>
+          <Box sx={{minWidth:0}}>
+            <Typography sx={{fontWeight:800,lineHeight:1.1}}>Ledger</Typography>
+            <Typography variant="caption" color="text.secondary">{scopeLabel}</Typography>
+          </Box>
+          <Stack direction="row" spacing={0.5}>
             <IconButton
-              edge="start"
+              aria-label="iPhone Shortcuts"
+              onClick={()=>navigate('/profile?tab=shortcuts')}
+              sx={{width:40,height:40}}
+            >
+              <PhoneIphoneRoundedIcon/>
+            </IconButton>
+            <IconButton
+              edge="end"
               aria-label="Open navigation"
               onClick={()=>setMobileOpen(true)}
               sx={{width:40,height:40}}
             >
               <MenuRoundedIcon/>
             </IconButton>
-            <Box>
-              <Typography sx={{fontWeight:800,lineHeight:1.1}}>Ledger</Typography>
-              <Typography variant="caption" color="text.secondary">{scopeLabel}</Typography>
-            </Box>
           </Stack>
-          <Avatar sx={{width:34,height:34,bgcolor:'secondary.main',fontSize:14}}>{profileInitial}</Avatar>
         </Stack>}
 
         <Stack
