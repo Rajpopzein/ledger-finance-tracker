@@ -103,7 +103,7 @@ export default function Transactions(){
             <Box sx={{minWidth:0}}>
               <Typography fontWeight={750} noWrap>{t.merchant||'Transaction'}</Typography>
               <Typography variant="caption" color="text.secondary" noWrap>{t.category} · {t.txn_type.replace('_',' ')}</Typography>
-              <Stack direction="row" gap=.6 sx={{mt:.6,flexWrap:'wrap'}}>
+              <Stack direction="row" gap={0.6} sx={{mt:.6,flexWrap:'wrap'}}>
                 {t.user&&<Chip size="small" variant="outlined" label={`${t.user.name} · ${t.user.handle}`}/>}
                 {upiLabel(t)&&<Chip size="small" color="primary" variant="outlined" label={upiLabel(t)}/>}
               </Stack>
@@ -157,7 +157,7 @@ export default function Transactions(){
 
         <Divider sx={{my:2}}/>
         <Typography variant="caption" color="text.secondary">SOURCES</Typography>
-        <Stack spacing=.8 sx={{mt:.8}}>
+        <Stack spacing={0.8} sx={{mt:.8}}>
           {selected.sources.map((s,i)=><Stack key={i} direction="row" justifyContent="space-between" spacing={1} sx={{p:1,bgcolor:'action.hover',borderRadius:2}}>
             <Typography variant="body2" fontWeight={700} sx={{overflowWrap:'anywhere'}}>{s.name}</Typography>
             <Chip size="small" label={s.type.toUpperCase()}/>
