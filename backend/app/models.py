@@ -63,6 +63,9 @@ class Transaction(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), nullable=True, index=True)
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True, index=True)
+    category_previous_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    category_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    category_undo_available: Mapped[bool] = mapped_column(Boolean, default=False)
     txn_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     direction: Mapped[str] = mapped_column(String(10))
@@ -79,7 +82,7 @@ class Transaction(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     account: Mapped[Account | None] = relationship()
     user: Mapped[User | None] = relationship()
-    category: Mapped[Category | None] = relationship()
+    category: Mapped[Category | None] = relationship(foreign_keys=[category_id])
     sources: Mapped[list["TransactionSource"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
 
 class TransactionSource(Base):
@@ -127,3 +130,34 @@ class AISetting(Base):
     allow_dates: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_balances: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_notes: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Debt(Base):
+    __tablename__ = "debts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    lender: Mapped[str] = mapped_column(String(160))
+    debt_type: Mapped[str] = mapped_column(String(50), default="loan")
+    principal: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    outstanding_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    interest_rate: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
+    emi_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="active", index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(30), default="manual")
+    source_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class DebtPayment(Base):
+    __tablename__ = "debt_payments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    debt_id: Mapped[int] = mapped_column(ForeignKey("debts.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
