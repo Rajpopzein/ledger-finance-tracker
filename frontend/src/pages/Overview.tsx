@@ -48,17 +48,52 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
         <Chip size="small" label="Spent" color="secondary" variant="outlined"/>
       </Stack>
     </Stack>
-    {s.cashflow.some(x=>x.income||x.spent)
-      ? <Box sx={{height:190,display:'grid',gridTemplateColumns:`repeat(${s.cashflow.length},minmax(28px,1fr))`,gap:1,alignItems:'end'}}>
-          {s.cashflow.map(m=><Stack key={m.label} alignItems="center" spacing={0.7} sx={{minWidth:0,height:'100%',justifyContent:'flex-end'}}>
+    {s.cashflow.some((x)=>x.income||x.spent) ? (
+      <Box
+        sx={{
+          height:190,
+          display:'grid',
+          gridTemplateColumns:`repeat(${s.cashflow.length}, minmax(28px, 1fr))`,
+          gap:1,
+          alignItems:'end',
+        }}
+      >
+        {s.cashflow.map((m)=>(
+          <Stack
+            key={m.label}
+            alignItems="center"
+            spacing={0.7}
+            sx={{minWidth:0,height:'100%',justifyContent:'flex-end'}}
+          >
             <Stack direction="row" alignItems="flex-end" spacing={0.45} sx={{height:150}}>
-              <Box title={`Income ${money(m.income)}`} sx={{width:{xs:7,sm:10},height:`${Math.max(3,m.income/max*145)}px`,borderRadius:'6px 6px 2px 2px',bgcolor:'primary.main'}}/>
-              <Box title={`Spent ${money(m.spent)}`} sx={{width:{xs:7,sm:10},height:`${Math.max(3,m.spent/max*145)}px`,borderRadius:'6px 6px 2px 2px',bgcolor:'secondary.main'}}/>
+              <Box
+                title={`Income ${money(m.income)}`}
+                sx={{
+                  width:{xs:7,sm:10},
+                  height:`${Math.max(3,m.income/max*145)}px`,
+                  borderRadius:'6px 6px 2px 2px',
+                  bgcolor:'primary.main',
+                }}
+              />
+              <Box
+                title={`Spent ${money(m.spent)}`}
+                sx={{
+                  width:{xs:7,sm:10},
+                  height:`${Math.max(3,m.spent/max*145)}px`,
+                  borderRadius:'6px 6px 2px 2px',
+                  bgcolor:'secondary.main',
+                }}
+              />
             </Stack>
             <Typography variant="caption" color="text.secondary">{m.label}</Typography>
-          </Stack>)}
-        </Box>
-      : <Typography color="text.secondary">Cash-flow history will appear after you import or add transactions.</Typography>}
+          </Stack>
+        ))}
+      </Box>
+    ) : (
+      <Typography color="text.secondary">
+        Cash-flow history will appear after you import or add transactions.
+      </Typography>
+    )}
   </Paper>
 }
 
