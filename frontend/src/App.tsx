@@ -4,6 +4,7 @@ import {Box,CircularProgress,Typography} from '@mui/material'
 import Layout from './components/Layout'
 import Overview from './pages/Overview'
 import Transactions from './pages/Transactions'
+import Debts from './pages/Debts'
 import ImportReview from './pages/ImportReview'
 import AIInsights from './pages/AIInsights'
 import Profile from './pages/Profile'
@@ -28,6 +29,7 @@ export default function App(){
     <Route element={<Layout/>}>
       <Route path="/" element={<Overview/>}/>
       <Route path="/transactions" element={<Transactions/>}/>
+      <Route path="/debts" element={<Debts/>}/>
       <Route path="/import" element={<ImportReview/>}/>
       <Route path="/ai" element={<AIInsights/>}/>
       <Route path="/profile" element={<Profile/>}/>
