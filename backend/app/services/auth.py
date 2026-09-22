@@ -26,20 +26,29 @@ def verify_password(password: str, salt_b64: str, hash_b64: str) -> bool:
     _, candidate = hash_password(password, salt)
     return hmac.compare_digest(candidate, hash_b64)
 
-def create_session(owner_id: int) -> str:
+def create_session(subject_id: int, role: str = "owner") -> str:
     payload = json.dumps(
-        {"sub": owner_id, "exp": int(time.time()) + SESSION_MAX_AGE},
+        {"sub": subject_id, "role": role, "exp": int(time.time()) + SESSION_MAX_AGE},
         separators=(",", ":"),
     )
     return encrypt(payload)
 
-def read_session(token: str | None) -> int | None:
+def read_session_claims(token: str | None) -> dict | None:
     if not token:
         return None
     try:
         payload = json.loads(decrypt(token))
         if int(payload.get("exp", 0)) < int(time.time()):
             return None
-        return int(payload["sub"])
+        return {
+            "sub": int(payload["sub"]),
+            "role": str(payload.get("role") or "owner"),
+        }
     except Exception:
         return None
+
+def read_session(token: str | None) -> int | None:
+    claims = read_session_claims(token)
+    if not claims or claims.get("role") != "owner":
+        return None
+    return int(claims["sub"])
