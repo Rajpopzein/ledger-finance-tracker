@@ -2,6 +2,24 @@ from datetime import datetime, date
 from decimal import Decimal
 from pydantic import BaseModel, EmailStr, Field
 
+class UserSignup(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+    name: str = Field(min_length=1, max_length=100)
+    handle: str = Field(min_length=3, max_length=40)
+
+class UserProfileUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    handle: str = Field(min_length=3, max_length=40)
+    phone: str | None = Field(default=None, max_length=30)
+
+class FamilyLinkCreate(BaseModel):
+    handle: str = Field(min_length=3, max_length=40)
+    label: str | None = Field(default=None, max_length=50)
+
+class FamilyLinkAction(BaseModel):
+    action: str = Field(pattern="^(accept|reject)$")
+
 class OwnerSetup(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
