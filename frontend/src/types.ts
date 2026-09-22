@@ -1,4 +1,4 @@
-export type FamilyMember={id:number;member_code:string;name:string}
+export type UserRef={id:number;name:string;handle:string}
 
 export type Tx={
   id:number
@@ -13,7 +13,7 @@ export type Tx={
   excluded:boolean
   account:string
   category:string
-  family_member?:FamilyMember|null
+  user?:UserRef|null
   sources:{type:string;name:string}[]
 }
 
@@ -26,5 +26,5 @@ export type Summary={
   needs_review:number
   categories:{name:string;amount:number}[]
   cashflow:{label:string;income:number;spent:number}[]
-  family_spending:{id:number|null;member_code:string;name:string;amount:number}[]
+  family_spending:{id:number;handle:string;name:string;amount:number}[]
 }
