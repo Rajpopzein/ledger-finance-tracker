@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react'
 import {Link} from 'react-router-dom'
 import {api} from '../api/client'
+import UPIImport from '../components/UPIImport'
 
 type ImportStage='idle'|'uploading'|'committing'|'reprocessing'
 
@@ -12,6 +13,7 @@ export default function ImportReview(){
   const [error,setError]=useState('')
   const [fileName,setFileName]=useState('')
   const [selectedFile,setSelectedFile]=useState<File|null>(null)
+  const [mode,setMode]=useState<'bank'|'upi'>('bank')
 
   const busy=stage!=='idle'
 
@@ -71,12 +73,19 @@ export default function ImportReview(){
     <div className="page-head">
       <div>
         <small>SAFE IMPORT</small>
-        <h1>Import bank statement</h1>
-        <p>CSV and XLSX only in v1. We validate duplicates before anything enters the ledger.</p>
+        <h1>Import transactions</h1>
+        <p>Reconcile bank statements and UPI app history without creating duplicate expenses.</p>
       </div>
     </div>
 
-    <div className="gridImport">
+    <div className="import-tabs" role="tablist" aria-label="Import source">
+      <button className={mode==='bank'?'active':''} onClick={()=>setMode('bank')}>Bank statement</button>
+      <button className={mode==='upi'?'active':''} onClick={()=>setMode('upi')}>UPI apps</button>
+    </div>
+
+    {mode==='upi'
+      ? <UPIImport accounts={accounts.filter(a=>a.type==='bank')}/>
+      : <div className="gridImport">
       <section>
         <div className="upload card">
           {accounts.length
@@ -197,6 +206,6 @@ export default function ImportReview(){
         </div>
         <p className="muted">The same transaction can appear in multiple sources without becoming multiple expenses.</p>
       </aside>
-    </div>
+    </div>}
   </>
 }
