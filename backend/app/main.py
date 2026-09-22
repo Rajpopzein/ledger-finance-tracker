@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, FamilyMember, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner
+from .models import Account, Category, FamilyMember, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User
 from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin, FamilySignup
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -22,7 +22,7 @@ from .services.secrets import encrypt
 from .services.ai import ask_model
 from .upi_imports import router as upi_imports_router
 from .bank_imports import router as bank_imports_router
-from .family import router as family_router
+from .users import router as users_router, linked_user_ids
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -36,7 +36,7 @@ from .services.auth import (
 app = FastAPI(title="Ledger v1 API")
 app.include_router(upi_imports_router)
 app.include_router(bank_imports_router)
-app.include_router(family_router)
+app.include_router(users_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
@@ -52,6 +52,7 @@ PUBLIC_API_PATHS = {
     "/api/auth/setup",
     "/api/auth/login",
     "/api/auth/family-signup",
+    "/api/auth/signup",
     "/api/auth/logout",
 }
 
