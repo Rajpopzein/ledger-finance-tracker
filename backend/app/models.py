@@ -26,11 +26,20 @@ class Category(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80), unique=True)
 
+class FamilyMember(Base):
+    __tablename__ = "family_members"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    member_code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class Transaction(Base):
     __tablename__ = "transactions"
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), nullable=True, index=True)
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True, index=True)
+    family_member_id: Mapped[int | None] = mapped_column(ForeignKey("family_members.id"), nullable=True, index=True)
     txn_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     direction: Mapped[str] = mapped_column(String(10))
@@ -47,6 +56,7 @@ class Transaction(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     account: Mapped[Account | None] = relationship()
     category: Mapped[Category | None] = relationship()
+    family_member: Mapped[FamilyMember | None] = relationship()
     sources: Mapped[list["TransactionSource"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
 
 class TransactionSource(Base):
