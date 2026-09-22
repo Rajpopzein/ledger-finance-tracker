@@ -11,6 +11,8 @@ class User(Base):
     handle: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    theme_mode: Mapped[str] = mapped_column(String(20), default="dark")
+    dashboard_template: Mapped[str] = mapped_column(String(30), default="balanced")
     password_salt: Mapped[str] = mapped_column(String(255))
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
