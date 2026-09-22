@@ -105,14 +105,14 @@ export default function ImportReview(){
                       </>
                     : <>
                         <b>{fileName?'Choose another statement':'Choose statement'}</b>
-                        <span>{fileName?fileName:'CSV or XLSX'}</span>
+                        <span>{fileName?fileName:'CSV, XLSX or XLS'}</span>
                         <small>{fileName?'Select a file to replace the current selection.':'Ledger will preview transactions before importing anything.'}</small>
                       </>
                   }
 
                   <input
                     type="file"
-                    accept=".csv,.xlsx"
+                    accept=".csv,.xlsx,.xls"
                     disabled={busy}
                     onChange={e=>{
                       const file=e.target.files?.[0]
