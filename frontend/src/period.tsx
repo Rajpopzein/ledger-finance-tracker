@@ -1,6 +1,7 @@
-import {createContext,useContext,useMemo,useState} from 'react';import type {ReactNode} from 'react'
+import {createContext,useContext,useMemo,useState} from 'react'
+import type {ReactNode} from 'react'
 
-type PeriodKey='current'|'previous'|'last3'
+type PeriodKey='current'|'previous'|'last3'|'all'
 export type Period={key:PeriodKey;label:string;from:string;to:string;rangeLabel:string}
 
 type PeriodContextValue={period:Period;setPeriodKey:(key:PeriodKey)=>void;options:Period[]}
@@ -19,10 +20,12 @@ function buildPeriods():Period[]{
   const prevDate=new Date(now.getFullYear(),now.getMonth()-1,1)
   const prevStart=startMonth(prevDate), prevEnd=endMonth(prevDate)
   const last3Start=new Date(now.getFullYear(),now.getMonth()-2,1)
+
   return [
     {key:'current',label:monthLabel(currentStart),from:iso(currentStart),to:iso(currentEnd),rangeLabel:rangeLabel(currentStart,currentEnd)},
     {key:'previous',label:monthLabel(prevStart),from:iso(prevStart),to:iso(prevEnd),rangeLabel:rangeLabel(prevStart,prevEnd)},
-    {key:'last3',label:'Last 3 months',from:iso(last3Start),to:iso(currentEnd),rangeLabel:rangeLabel(last3Start,currentEnd)}
+    {key:'last3',label:'Last 3 months',from:iso(last3Start),to:iso(currentEnd),rangeLabel:rangeLabel(last3Start,currentEnd)},
+    {key:'all',label:'All data',from:'',to:'',rangeLabel:'All imported transactions'}
   ]
 }
 
