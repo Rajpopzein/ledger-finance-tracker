@@ -52,7 +52,7 @@ export default function Transactions(){
 
   const clay=claySx(resolvedMode)
 
-  return <Stack spacing={2.2}>
+  return <Stack spacing={{xs:1.4,sm:2}}>
     <Box>
       <Typography variant="overline" color="text.secondary">{period.label.toUpperCase()} · {scopeLabel.toUpperCase()}</Typography>
       <Typography variant="h1">Transactions</Typography>
@@ -75,10 +75,10 @@ export default function Transactions(){
     {!loading&&!error&&<Box sx={{
       display:'grid',
       gridTemplateColumns:{xs:'1fr',lg:'minmax(0,1fr) 360px'},
-      gap:2,
+      gap:{xs:1.15,sm:2},
       alignItems:'start',
     }}>
-      <Paper sx={{...clay,p:{xs:1,sm:1.5},minWidth:0}}>
+      <Paper sx={{...clay,p:{xs:.55,sm:1.25},minWidth:0}}>
         <Stack divider={<Divider/>}>
           {items.map(t=><Box
             key={t.id}
@@ -91,18 +91,18 @@ export default function Transactions(){
               color:'text.primary',
               textAlign:'left',
               cursor:'pointer',
-              borderRadius:2.5,
-              p:{xs:1.2,sm:1.4},
+              borderRadius:1.5,
+              p:{xs:1,sm:1.3},
               display:'grid',
               gridTemplateColumns:{xs:'1fr auto',sm:'minmax(0,2fr) minmax(110px,1fr) minmax(110px,1fr) auto'},
-              gap:{xs:.8,sm:1.5},
+              gap:{xs:.6,sm:1.25},
               alignItems:'center',
               '&:hover':{bgcolor:'action.hover'},
             }}
           >
             <Box sx={{minWidth:0}}>
-              <Typography fontWeight={750} noWrap>{t.merchant||'Transaction'}</Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>{t.category} · {t.txn_type.replace('_',' ')}</Typography>
+              <Typography variant="body2" sx={{fontWeight:750,overflowWrap:'anywhere'}}>{t.merchant||'Transaction'}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{display:'block',overflowWrap:'anywhere'}}>{t.category} · {t.txn_type.replace('_',' ')}</Typography>
               <Stack direction="row" gap={0.6} sx={{mt:.6,flexWrap:'wrap'}}>
                 {t.user&&<Chip size="small" variant="outlined" label={`${t.user.name} · ${t.user.handle}`}/>}
                 {upiLabel(t)&&<Chip size="small" color="primary" variant="outlined" label={upiLabel(t)}/>}
@@ -136,7 +136,7 @@ export default function Transactions(){
         </Stack>
       </Paper>
 
-      {selected&&<Paper sx={{...clay,p:2.2,minWidth:0,position:{lg:'sticky'},top:{lg:92}}}>
+      {selected&&<Paper sx={{...clay,p:{xs:1.4,sm:2},minWidth:0,position:{lg:'sticky'},top:{lg:92}}}>
         <Typography variant="overline" color="text.secondary">TRANSACTION DETAILS</Typography>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2} sx={{mt:.5}}>
           <Box sx={{minWidth:0}}>
@@ -148,7 +148,7 @@ export default function Transactions(){
 
         <Divider sx={{my:2}}/>
 
-        <Box sx={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:1.4}}>
+        <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},gap:{xs:1,sm:1.4}}}>
           <Box><Typography variant="caption" color="text.secondary">Category</Typography><Typography fontWeight={700}>{selected.category}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Account</Typography><Typography fontWeight={700} sx={{overflowWrap:'anywhere'}}>{selected.account}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">User</Typography><Typography fontWeight={700}>{selected.user?.name||'Unknown'}</Typography><Typography variant="caption" color="text.secondary">{selected.user?.handle||''}</Typography></Box>
