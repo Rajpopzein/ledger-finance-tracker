@@ -1,3 +1,4 @@
+import json
 import hashlib, uuid
 from collections import defaultdict
 from datetime import datetime, timezone, date, time, timedelta
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, AISetting, Owner
+from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner
 from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -319,13 +320,24 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
         counts[state]+=1
         classified.append({**row,"amount":str(row["amount"]),"state":state,"match_id":match.id if match else None,"match_method":method,"score":score})
     token=str(uuid.uuid4())
-    PREVIEWS[token]={
-        "account_id":account_id,
-        "file_name":file.filename,
-        "file_hash":file_hash,
-        "items":classified,
-        "existing_batch_id":existing_batch.id if existing_batch else None,
-    }
+    stored_items=[]
+    for row in classified:
+        stored_items.append({
+            **row,
+            "txn_at":row["txn_at"].isoformat(),
+            "amount":str(row["amount"]),
+        })
+    db.add(ImportPreview(
+        token=token,
+        account_id=account_id,
+        file_name=file.filename or "statement.csv",
+        file_hash=file_hash,
+        payload_json=json.dumps({
+            "items":stored_items,
+            "existing_batch_id":existing_batch.id if existing_batch else None,
+        }),
+    ))
+    db.commit()
     debit_count=sum(1 for row in classified if row["direction"]=="debit")
     credit_count=sum(1 for row in classified if row["direction"]=="credit")
     return {
@@ -340,10 +352,24 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
 
 @app.post("/api/imports/commit/{token}")
 def commit(token:str, db:Session=Depends(get_db)):
-    data=PREVIEWS.pop(token,None)
-    if not data: raise HTTPException(404,"Preview expired")
-    if not data["items"]:
+    preview_record=db.get(ImportPreview,token)
+    if not preview_record:
+        raise HTTPException(404,"Import preview not found. Upload the statement again.")
+    payload=json.loads(preview_record.payload_json)
+    items=payload.get("items") or []
+    if not items:
         raise HTTPException(400,"Cannot commit an empty import")
+
+    data={
+        "account_id":preview_record.account_id,
+        "file_name":preview_record.file_name,
+        "file_hash":preview_record.file_hash,
+        "items":items,
+        "existing_batch_id":payload.get("existing_batch_id"),
+    }
+    for row in data["items"]:
+        row["txn_at"]=datetime.fromisoformat(row["txn_at"])
+
     batch=None
     if data.get("existing_batch_id"):
         batch=db.get(ImportBatch,data["existing_batch_id"])
@@ -369,7 +395,9 @@ def commit(token:str, db:Session=Depends(get_db)):
         fp=fingerprint(data["account_id"],row["txn_at"],amount,row["direction"],row["description"])
         tx=Transaction(account_id=data["account_id"],txn_at=row["txn_at"],amount=amount,direction=row["direction"],txn_type="income" if row["direction"]=="credit" else "expense",description_raw=row["description"],merchant=row["description"][:160],bank_ref=row.get("bank_ref"),fingerprint=fp,verification_status="verified")
         tx.sources.append(TransactionSource(source_type=data["file_name"].split(".")[-1].lower(),source_name=data["file_name"],external_hash=data["file_hash"])); db.add(tx); inserted+=1
-    db.commit(); return {"inserted":inserted,"matched":matched,"review":review,"batch_id":batch.id}
+    db.delete(preview_record)
+    db.commit()
+    return {"inserted":inserted,"matched":matched,"review":review,"batch_id":batch.id}
 
 @app.get("/api/ai/settings")
 def get_ai_settings(db:Session=Depends(get_db)):
