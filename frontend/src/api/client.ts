@@ -36,10 +36,8 @@ const dateQs=(from?:string,to?:string)=>{
 
 export const api={
  authStatus:()=>req<any>('/auth/status'),
- setupOwner:(email:string,password:string)=>req<any>('/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
  signup:(name:string,handle:string,email:string,password:string)=>req<any>('/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,handle,email,password})}),
  login:(email:string,password:string)=>req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
- familySignup:(memberCode:string,email:string,password:string)=>req<any>('/auth/family-signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({member_code:memberCode,email,password})}),
  logout:()=>req<any>('/auth/logout',{method:'POST'}),
  summary:(from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
    const p=new URLSearchParams()
@@ -87,16 +85,14 @@ export const api={
    f.append('file',file)
    return req<any>('/imports/bank/commit',{method:'POST',body:f})
  },
- upiPreview:(accountId:number,app:string,file:File)=>{
+ upiPreview:(app:string,file:File)=>{
    const f=new FormData()
-   f.append('account_id',String(accountId))
    f.append('app',app)
    f.append('file',file)
    return req<any>('/imports/upi/preview',{method:'POST',body:f})
  },
- upiCommit:(accountId:number,app:string,file:File)=>{
+ upiCommit:(app:string,file:File)=>{
    const f=new FormData()
-   f.append('account_id',String(accountId))
    f.append('app',app)
    f.append('file',file)
    return req<any>('/imports/upi/commit',{method:'POST',body:f})
