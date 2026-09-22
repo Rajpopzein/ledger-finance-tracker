@@ -5,6 +5,7 @@ import type {Summary,Tx} from '../types'
 import {usePeriod} from '../period'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n)
+const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
 
 export default function Overview(){
   const {period,setPeriodKey}=usePeriod()
@@ -116,7 +117,7 @@ export default function Overview(){
         {tx.length
           ? <div className="tx-list">{tx.map(t=>
               <div className="tx" key={t.id}>
-                <div><strong>{t.merchant||t.description||'Transaction'}</strong><span>{t.category} • {t.account}</span></div>
+                <div><strong>{t.merchant||t.description||'Transaction'}</strong><span>{t.category} • {t.account}</span>{upiLabel(t)&&<em className="source-pill">{upiLabel(t)}</em>}</div>
                 <div className={t.direction==='credit'?'pos':''}>
                   <b>{t.direction==='credit'?'+':'-'}{money(t.amount)}</b>
                   <small>{t.verification_status.replace('_',' ')}</small>
