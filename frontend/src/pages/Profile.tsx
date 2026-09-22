@@ -20,15 +20,16 @@ import {api} from '../api/client'
 import {useFamily} from '../family'
 import {claySx,useUI} from '../ui'
 import Settings from './Settings'
+import ShortcutsSetup from '../components/ShortcutsSetup'
 
-type ProfileTab='account'|'family'|'settings'
+type ProfileTab='account'|'family'|'shortcuts'|'settings'
 
 export default function Profile(){
   const {linkedUsers,incoming,outgoing,refreshFamily}=useFamily()
   const {resolvedMode}=useUI()
   const [searchParams,setSearchParams]=useSearchParams()
   const rawTab=searchParams.get('tab')
-  const tab:ProfileTab=rawTab==='family'||rawTab==='settings'?rawTab:'account'
+  const tab:ProfileTab=rawTab==='family'||rawTab==='shortcuts'||rawTab==='settings'?rawTab:'account'
 
   const [profile,setProfile]=useState<any>(null)
   const [form,setForm]=useState({name:'',phone:''})
@@ -140,7 +141,9 @@ export default function Profile(){
       <Tabs
         value={tab}
         onChange={(_,value)=>setSearchParams({tab:value})}
-        variant="fullWidth"
+        variant="scrollable"
+        scrollButtons={false}
+        allowScrollButtonsMobile
         aria-label="Profile sections"
         sx={{
           minHeight:44,
@@ -153,6 +156,7 @@ export default function Profile(){
       >
         <Tab value="account" label="Account"/>
         <Tab value="family" label="Family"/>
+        <Tab value="shortcuts" label="Shortcuts"/>
         <Tab value="settings" label="Settings"/>
       </Tabs>
     </Paper>
@@ -331,6 +335,7 @@ export default function Profile(){
       </Paper>
     </Stack>}
 
+    {tab==='shortcuts'&&<ShortcutsSetup/>}
     {tab==='settings'&&<Settings embedded/>}
   </Stack>
 }
