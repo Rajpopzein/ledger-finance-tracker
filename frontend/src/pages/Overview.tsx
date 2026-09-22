@@ -181,10 +181,17 @@ export default function Overview(){
     try{
       const [summary,transactions]=await Promise.all([
         api.summary(period.from,period.to,familyScope,familyUserId),
-        api.transactions('',period.from,period.to,familyScope,familyUserId)
+        api.transactions({
+          from:period.from,
+          to:period.to,
+          familyScope,
+          familyUserId,
+          page:1,
+          pageSize:5,
+        })
       ])
       setS(summary)
-      setTx(transactions.slice(0,5))
+      setTx(transactions.items||[])
     }catch(e:any){
       setError(e.message||'Could not load dashboard data.')
       setS(null)
