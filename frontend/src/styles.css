@@ -26,3 +26,43 @@
 @media(max-width:700px){.period-empty{align-items:flex-start;flex-direction:column}.dashboard-state{align-items:flex-start}}
 
 .detail{min-width:0;overflow:hidden}.detail>.row.between{align-items:flex-start;flex-wrap:wrap;gap:12px}.detail>.row.between>div{min-width:0;flex:1 1 190px}.detail>.row.between>h2{flex:0 0 auto;max-width:100%;white-space:nowrap}.detail h2,.detail b,.detail span{overflow-wrap:anywhere;word-break:break-word}.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid>div{min-width:0}.source{min-width:0;gap:10px;align-items:flex-start;flex-wrap:wrap}.source b{min-width:0;flex:1 1 180px;max-width:100%}.source span{flex:0 0 auto;max-width:100%}.detail details{max-width:100%;overflow:hidden}.detail details pre{max-width:100%;overflow-x:auto;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap}@media(max-width:520px){.detail-grid{grid-template-columns:1fr}.detail>.row.between>h2{white-space:normal}}
+
+
+/* Mobile safety: prevent loading states and form controls from overflowing */
+html,body,#root,.app,.shell,main{max-width:100%;min-width:0}
+body{overflow-x:hidden}
+.card,.hero,.ledger,.detail,.modal,.statusline,.dashboard-state,.period-empty{min-width:0;max-width:100%}
+input,select,textarea,button{min-width:0;max-width:100%}
+input[type="datetime-local"],input[type="number"],input[type="file"]{width:100%;min-width:0}
+.dashboard-state{width:100%;overflow:hidden}
+.dashboard-state>div:last-child{min-width:0;flex:1}
+.dashboard-state b,.dashboard-state span{overflow-wrap:anywhere;word-break:break-word}
+.modal-back{overflow-y:auto}
+.modal{max-height:calc(100dvh - 32px);overflow-y:auto}
+.modal-head{min-width:0}
+.modal-head h2{min-width:0;overflow-wrap:anywhere}
+.modal-close{flex:0 0 auto}
+.modal-submit{width:100%}
+.form2>*{min-width:0}
+.askbox>*{min-width:0}
+.drop input{width:100%;max-width:100%}
+.page-head>*{min-width:0}
+
+@media(max-width:640px){
+  main{padding-left:12px;padding-right:12px}
+  .page-head{align-items:stretch;flex-direction:column}
+  .page-head>.primary{width:100%}
+  .form2{grid-template-columns:1fr}
+  .askbox{flex-direction:column}
+  .askbox .primary{width:100%}
+  .statusline{align-items:flex-start;flex-wrap:wrap}
+  .dashboard-state{align-items:flex-start;flex-wrap:wrap;padding:16px}
+  .period-empty{align-items:stretch}
+  .period-empty .secondary{width:100%}
+  .modal-back{padding:10px;place-items:start center}
+  .modal{width:100%;padding:18px;margin:10px 0}
+  .modal .row.between{align-items:flex-start}
+  .card{padding:16px}
+  .verify{gap:12px}
+  .source{align-items:flex-start}
+}
