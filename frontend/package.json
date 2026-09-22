@@ -11,11 +11,7 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "react-router-dom": "latest",
-    "@emotion/react": "latest",
-    "@emotion/styled": "latest",
-    "@mui/icons-material": "latest",
-    "@mui/material": "latest"
+    "react-router-dom": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",
