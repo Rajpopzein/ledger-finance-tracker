@@ -301,7 +301,17 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
         "items":classified,
         "existing_batch_id":existing_batch.id if existing_batch else None,
     }
-    return {"preview_token":token,"already_imported":False,"detected":len(rows),**counts,"items":classified[:100]}
+    debit_count=sum(1 for row in classified if row["direction"]=="debit")
+    credit_count=sum(1 for row in classified if row["direction"]=="credit")
+    return {
+        "preview_token":token,
+        "already_imported":False,
+        "detected":len(rows),
+        "debits":debit_count,
+        "credits":credit_count,
+        **counts,
+        "items":classified[:100],
+    }
 
 @app.post("/api/imports/commit/{token}")
 def commit(token:str, db:Session=Depends(get_db)):
