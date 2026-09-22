@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Divider,
   FormControl,
   InputLabel,
@@ -19,6 +20,7 @@ import {
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import UndoRoundedIcon from '@mui/icons-material/UndoRounded'
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
 import type {TransactionPage,Tx} from '../types'
 import {api} from '../api/client'
 import {usePeriod} from '../period'
@@ -40,7 +42,7 @@ export default function Transactions(){
   const [direction,setDirection]=useState('')
   const [accounts,setAccounts]=useState<any[]>([])
   const [data,setData]=useState<TransactionPage>({items:[],page:1,page_size:25,total:0,pages:1})
-  const [selected,setSelected]=useState<Tx|null>(null)
+  const [expandedId,setExpandedId]=useState<number|null>(null)
   const [page,setPage]=useState(1)
   const [pageSize,setPageSize]=useState(25)
   const [loading,setLoading]=useState(true)
@@ -76,11 +78,9 @@ export default function Transactions(){
         pageSize,
       })
       setData(result)
-      setSelected(prev=>result.items.find((x:Tx)=>x.id===prev?.id)||result.items[0]||null)
       if(page>result.pages)setPage(result.pages)
     }catch(e:any){
       setData({items:[],page:1,page_size:pageSize,total:0,pages:1})
-      setSelected(null)
       setError(e.message||'Could not load transactions.')
     }finally{
       setLoading(false)
@@ -204,22 +204,17 @@ export default function Transactions(){
 
     {loading?<Stack spacing={1}>
       {[1,2,3,4].map(i=><Skeleton key={i} variant="rounded" height={72} sx={{borderRadius:1.5}}/>)}
-    </Stack>:<Box sx={{
-      display:'grid',
-      gridTemplateColumns:{xs:'1fr',lg:'minmax(0,1fr) 360px'},
-      gap:{xs:1.15,sm:2},
-      alignItems:'start',
-    }}>
-      <Paper sx={{...clay,p:{xs:.5,sm:1.15},minWidth:0}}>
-        <Stack divider={<Divider/>}>
-          {data.items.map(t=><Box
-            key={t.id}
+    </Stack>:<Paper sx={{...clay,p:{xs:.5,sm:1.15},minWidth:0}}>
+      <Stack divider={<Divider/>}>
+        {data.items.map(t=><Box key={t.id}>
+          <Box
             component="button"
-            onClick={()=>setSelected(t)}
+            onClick={()=>setExpandedId(current=>current===t.id?null:t.id)}
+            aria-expanded={expandedId===t.id}
             sx={{
               border:0,
               width:'100%',
-              bgcolor:selected?.id===t.id?'action.selected':'transparent',
+              bgcolor:expandedId===t.id?'action.selected':'transparent',
               color:'text.primary',
               textAlign:'left',
               cursor:'pointer',
@@ -253,87 +248,94 @@ export default function Transactions(){
               <Typography variant="caption" color="text.secondary">{t.verification_status.replace('_',' ')}</Typography>
             </Box>
 
-            <Box sx={{textAlign:'right',alignSelf:'start'}}>
-              <Typography sx={{fontWeight:800,fontSize:{xs:13,sm:14}}} color={t.direction==='credit'?'primary.main':'text.primary'}>
-                {t.direction==='credit'?'+':'-'}{money(t.amount)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{display:{xs:'block',sm:'none'}}}>
-                {new Date(t.txn_at).toLocaleDateString('en-IN')}
-              </Typography>
-            </Box>
-          </Box>)}
-
-          {!data.items.length&&<Box sx={{p:3,textAlign:'center'}}>
-            <Typography sx={{fontWeight:700}}>No transactions match these filters.</Typography>
-          </Box>}
-        </Stack>
-
-        {data.total>0&&<Stack direction={{xs:'column',sm:'row'}} spacing={1} justifyContent="space-between" alignItems="center" sx={{pt:1.25}}>
-          <Pagination
-            count={data.pages}
-            page={data.page}
-            onChange={(_,value)=>setPage(value)}
-            size="small"
-            siblingCount={0}
-            boundaryCount={1}
-          />
-          <FormControl size="small" sx={{minWidth:105}}>
-            <InputLabel>Per page</InputLabel>
-            <Select label="Per page" value={String(pageSize)} onChange={e=>{setPageSize(Number(e.target.value));setPage(1)}}>
-              {[10,25,50,100].map(size=><MenuItem key={size} value={String(size)}>{size}</MenuItem>)}
-            </Select>
-          </FormControl>
-        </Stack>}
-      </Paper>
-
-      {selected&&<Paper sx={{...clay,p:{xs:1.4,sm:2},minWidth:0,position:{lg:'sticky'},top:{lg:92}}}>
-        <Typography variant="overline" color="text.secondary">TRANSACTION DETAILS</Typography>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5} sx={{mt:.5}}>
-          <Box sx={{minWidth:0}}>
-            <Typography variant="h2" sx={{overflowWrap:'anywhere'}}>{selected.merchant||'Transaction'}</Typography>
-            <Typography variant="caption" color="text.secondary">{new Date(selected.txn_at).toLocaleString('en-IN')}</Typography>
+            <Stack direction="row" spacing={0.35} alignItems="flex-start" justifyContent="flex-end">
+              <Box sx={{textAlign:'right'}}>
+                <Typography sx={{fontWeight:800,fontSize:{xs:13,sm:14}}} color={t.direction==='credit'?'primary.main':'text.primary'}>
+                  {t.direction==='credit'?'+':'-'}{money(t.amount)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{display:{xs:'block',sm:'none'}}}>
+                  {new Date(t.txn_at).toLocaleDateString('en-IN')}
+                </Typography>
+              </Box>
+              <ExpandMoreRoundedIcon
+                sx={{
+                  fontSize:20,
+                  mt:'1px',
+                  color:'text.secondary',
+                  transform:expandedId===t.id?'rotate(180deg)':'rotate(0deg)',
+                  transition:'transform .18s ease',
+                }}
+              />
+            </Stack>
           </Box>
-          <Typography sx={{fontWeight:850,fontSize:'1.2rem',flex:'0 0 auto'}}>{money(selected.amount)}</Typography>
-        </Stack>
 
-        <Divider sx={{my:1.5}}/>
+          <Collapse in={expandedId===t.id} timeout="auto" unmountOnExit>
+            <Box sx={{
+              mx:{xs:.5,sm:1},
+              mb:1,
+              p:{xs:1.1,sm:1.35},
+              bgcolor:'action.hover',
+              borderRadius:1.4,
+            }}>
+              <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1}}>
+                <Box><Typography variant="caption" color="text.secondary">Category</Typography><Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.category}</Typography></Box>
+                <Box><Typography variant="caption" color="text.secondary">Account</Typography><Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.account}</Typography></Box>
+                <Box><Typography variant="caption" color="text.secondary">User</Typography><Typography variant="body2" sx={{fontWeight:700}}>{t.user?.name||'Unknown'}</Typography></Box>
+                <Box><Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2" sx={{fontWeight:700}}>{t.verification_status.replace('_',' ')}</Typography></Box>
+              </Box>
 
-        <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},gap:1}}>
-          <Box><Typography variant="caption" color="text.secondary">Category</Typography><Typography variant="body2" sx={{fontWeight:700}}>{selected.category}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">Bank / account</Typography><Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{selected.account}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">User</Typography><Typography variant="body2" sx={{fontWeight:700}}>{selected.user?.name||'Unknown'}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2" sx={{fontWeight:700}}>{selected.verification_status.replace('_',' ')}</Typography></Box>
-        </Box>
+              {t.category_source==='ai'&&<Alert severity="info" sx={{mt:1}}>
+                This category was selected by AI.
+              </Alert>}
 
-        {selected.category_source==='ai'&&<Alert severity="info" sx={{mt:1.5}}>
-          This category was selected by AI.
-        </Alert>}
+              {t.can_undo_category&&<Button
+                size="small"
+                sx={{mt:.75}}
+                startIcon={<UndoRoundedIcon/>}
+                onClick={e=>{e.stopPropagation();undoCategory(t)}}
+                disabled={aiBusy}
+              >
+                Undo AI category
+              </Button>}
 
-        {selected.can_undo_category&&<Button
-          fullWidth
-          sx={{mt:1}}
-          startIcon={<UndoRoundedIcon/>}
-          onClick={()=>undoCategory(selected)}
-          disabled={aiBusy}
-        >
-          Undo AI category
-        </Button>}
+              {t.sources.length>0&&<>
+                <Divider sx={{my:1}}/>
+                <Typography variant="caption" color="text.secondary">SOURCES</Typography>
+                <Stack direction="row" gap={.6} sx={{mt:.55,flexWrap:'wrap'}}>
+                  {t.sources.map((source,i)=><Chip key={i} size="small" label={source.name}/>)}
+                </Stack>
+              </>}
 
-        <Divider sx={{my:1.5}}/>
-        <Typography variant="caption" color="text.secondary">SOURCES</Typography>
-        <Stack spacing={0.65} sx={{mt:.7}}>
-          {selected.sources.map((source,i)=><Stack key={i} direction="row" justifyContent="space-between" spacing={1} sx={{p:.85,bgcolor:'action.hover',borderRadius:1.4}}>
-            <Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{source.name}</Typography>
-            <Chip size="small" label={source.type.toUpperCase()}/>
-          </Stack>)}
-        </Stack>
+              {t.description&&<>
+                <Divider sx={{my:1}}/>
+                <Typography variant="caption" color="text.secondary">DESCRIPTION</Typography>
+                <Typography variant="body2" sx={{mt:.45,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{t.description}</Typography>
+              </>}
+            </Box>
+          </Collapse>
+        </Box>)}
 
-        {selected.description&&<>
-          <Divider sx={{my:1.5}}/>
-          <Typography variant="caption" color="text.secondary">DESCRIPTION</Typography>
-          <Typography variant="body2" sx={{mt:.6,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{selected.description}</Typography>
-        </>}
-      </Paper>}
-    </Box>}
+        {!data.items.length&&<Box sx={{p:3,textAlign:'center'}}>
+          <Typography sx={{fontWeight:700}}>No transactions match these filters.</Typography>
+        </Box>}
+      </Stack>
+
+      {data.total>0&&<Stack direction={{xs:'column',sm:'row'}} spacing={1} justifyContent="space-between" alignItems="center" sx={{pt:1.25}}>
+        <Pagination
+          count={data.pages}
+          page={data.page}
+          onChange={(_,value)=>{setPage(value);setExpandedId(null)}}
+          size="small"
+          siblingCount={0}
+          boundaryCount={1}
+        />
+        <FormControl size="small" sx={{minWidth:105}}>
+          <InputLabel>Per page</InputLabel>
+          <Select label="Per page" value={String(pageSize)} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);setExpandedId(null)}}>
+            {[10,25,50,100].map(size=><MenuItem key={size} value={String(size)}>{size}</MenuItem>)}
+          </Select>
+        </FormControl>
+      </Stack>}
+    </Paper>}
   </Stack>
 }
