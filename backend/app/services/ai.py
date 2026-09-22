@@ -54,6 +54,12 @@ BLOCKED_TASK_TERMS = {
     "capital of","general knowledge","translate this","write an essay",
 }
 
+BLOCKED_SCOPE_PATTERNS = [
+    re.compile(r"\b(?:code|coding|programming|python|javascript|typescript|java|golang|rust|c\+\+|html|css|react|node(?:\.js)?|fastapi|django|algorithm|source code)\b", re.I),
+    re.compile(r"\b(?:ignore|disregard|override|bypass)\b.{0,40}\b(?:previous|system|developer|instruction|rules|guardrails)\b", re.I | re.S),
+    re.compile(r"\b(?:reveal|show|print|leak|expose)\b.{0,40}\b(?:system prompt|hidden prompt|developer message|api key|secret|token|password)\b", re.I | re.S),
+]
+
 FINANCE_TERMS = {
     "finance","financial","money","spend","spending","spent","expense","expenses","income",
     "salary","budget","saving","savings","debt","loan","emi","mortgage","interest","bank",
