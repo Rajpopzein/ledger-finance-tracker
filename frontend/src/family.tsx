@@ -2,16 +2,18 @@ import {createContext,useContext,useEffect,useMemo,useState} from 'react'
 import type {ReactNode} from 'react'
 import {api} from './api/client'
 
-export type FamilyMember={id:number;member_code:string;name:string;is_active?:boolean}
+export type LinkedUser={id:number;email:string;handle:string;handle_raw:string;name:string;phone?:string|null}
 export type FamilyScopeKey='self'|'family'|'all'|string
 
 type FamilyContextValue={
   scopeKey:FamilyScopeKey
   setScopeKey:(key:FamilyScopeKey)=>void
-  members:FamilyMember[]
-  refreshMembers:()=>Promise<void>
+  linkedUsers:LinkedUser[]
+  incoming:any[]
+  outgoing:any[]
+  refreshFamily:()=>Promise<void>
   familyScope:'self'|'family'|'all'
-  familyMemberId?:number
+  familyUserId?:number
   scopeLabel:string
 }
 
@@ -19,41 +21,50 @@ const FamilyContext=createContext<FamilyContextValue|null>(null)
 
 export function FamilyProvider({children}:{children:ReactNode}){
   const [scopeKey,setScopeKey]=useState<FamilyScopeKey>('self')
-  const [members,setMembers]=useState<FamilyMember[]>([])
+  const [linkedUsers,setLinkedUsers]=useState<LinkedUser[]>([])
+  const [incoming,setIncoming]=useState<any[]>([])
+  const [outgoing,setOutgoing]=useState<any[]>([])
 
-  async function refreshMembers(){
+  async function refreshFamily(){
     try{
-      const rows=await api.familyMembers()
-      setMembers(rows)
-      if(scopeKey.startsWith('member:')){
+      const network=await api.familyNetwork()
+      const users=(network.linked||[]).map((x:any)=>x.user)
+      setLinkedUsers(users)
+      setIncoming(network.incoming||[])
+      setOutgoing(network.outgoing||[])
+      if(scopeKey.startsWith('user:')){
         const id=Number(scopeKey.split(':')[1])
-        if(!rows.some((x:FamilyMember)=>x.id===id))setScopeKey('self')
+        if(!users.some((x:LinkedUser)=>x.id===id))setScopeKey('self')
       }
     }catch{
-      setMembers([])
+      setLinkedUsers([])
+      setIncoming([])
+      setOutgoing([])
     }
   }
 
-  useEffect(()=>{refreshMembers()},[])
+  useEffect(()=>{refreshFamily()},[])
 
   const derived=useMemo(()=>{
-    if(scopeKey==='self')return {familyScope:'self' as const,familyMemberId:undefined,scopeLabel:'Self'}
-    if(scopeKey==='family')return {familyScope:'family' as const,familyMemberId:undefined,scopeLabel:'Family'}
-    if(scopeKey==='all')return {familyScope:'all' as const,familyMemberId:undefined,scopeLabel:'Self + Family'}
-    if(scopeKey.startsWith('member:')){
+    if(scopeKey==='self')return {familyScope:'self' as const,familyUserId:undefined,scopeLabel:'Self'}
+    if(scopeKey==='family')return {familyScope:'family' as const,familyUserId:undefined,scopeLabel:'Family'}
+    if(scopeKey==='all')return {familyScope:'all' as const,familyUserId:undefined,scopeLabel:'Self + Family'}
+    if(scopeKey.startsWith('user:')){
       const id=Number(scopeKey.split(':')[1])
-      const member=members.find(x=>x.id===id)
-      return {familyScope:'all' as const,familyMemberId:id,scopeLabel:member?.name||'Family member'}
+      const user=linkedUsers.find(x=>x.id===id)
+      return {familyScope:'all' as const,familyUserId:id,scopeLabel:user?.name||'Family member'}
     }
-    return {familyScope:'self' as const,familyMemberId:undefined,scopeLabel:'Self'}
-  },[scopeKey,members])
+    return {familyScope:'self' as const,familyUserId:undefined,scopeLabel:'Self'}
+  },[scopeKey,linkedUsers])
 
   return <FamilyContext.Provider value={{
     scopeKey,
     setScopeKey,
-    members,
-    refreshMembers,
-    ...derived
+    linkedUsers,
+    incoming,
+    outgoing,
+    refreshFamily,
+    ...derived,
   }}>{children}</FamilyContext.Provider>
 }
 
