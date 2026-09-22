@@ -493,7 +493,11 @@ def summary(
     }
 
 @app.post("/api/imports/preview")
-async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Session=Depends(get_db)):
+async def preview(request:Request, account_id:int=Form(...), file:UploadFile=File(...), db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    account=db.get(Account,account_id)
+    if not account or account.user_id!=user_id:
+        raise HTTPException(404,"Account not found")
     content=await file.read(); file_hash=hashlib.sha256(content).hexdigest()
     existing_batch=db.scalar(select(ImportBatch).where(ImportBatch.account_id==account_id,ImportBatch.file_hash==file_hash))
     already_imported=False
@@ -572,10 +576,14 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
     }
 
 @app.post("/api/imports/commit/{token}")
-def commit(token:str, db:Session=Depends(get_db)):
+def commit(token:str, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
     preview_record=db.get(ImportPreview,token)
     if not preview_record:
         raise HTTPException(404,"Import preview not found. Upload the statement again.")
+    account=db.get(Account,preview_record.account_id)
+    if not account or account.user_id!=user_id:
+        raise HTTPException(404,"Import preview not found")
     payload=json.loads(preview_record.payload_json)
     items=payload.get("items") or []
     if not items:
@@ -614,7 +622,7 @@ def commit(token:str, db:Session=Depends(get_db)):
             continue
         if row["state"]=="review": review+=1; continue
         fp=fingerprint(data["account_id"],row["txn_at"],amount,row["direction"],row["description"])
-        tx=Transaction(account_id=data["account_id"],txn_at=row["txn_at"],amount=amount,direction=row["direction"],txn_type="income" if row["direction"]=="credit" else "expense",description_raw=row["description"],merchant=row["description"][:160],bank_ref=row.get("bank_ref"),fingerprint=fp,verification_status="verified")
+        tx=Transaction(user_id=user_id,account_id=data["account_id"],txn_at=row["txn_at"],amount=amount,direction=row["direction"],txn_type="income" if row["direction"]=="credit" else "expense",description_raw=row["description"],merchant=row["description"][:160],bank_ref=row.get("bank_ref"),fingerprint=fp,verification_status="verified")
         tx.sources.append(TransactionSource(source_type=data["file_name"].split(".")[-1].lower(),source_name=data["file_name"],external_hash=data["file_hash"])); db.add(tx); inserted+=1
     db.delete(preview_record)
     db.commit()
@@ -634,9 +642,8 @@ def save_ai_settings(body:AISettingsIn, db:Session=Depends(get_db)):
     db.add(s);db.commit();return {"ok":True}
 
 @app.post("/api/ai/ask")
-async def ai_ask(body:AIQuestion, db:Session=Depends(get_db)):
-    fake_request=type("R",(),{"state":type("S",(),{"auth":{"role":"owner","sub":1}})()})()
-    data=summary(fake_request, body.from_date, body.to_date, "self", None, db)
+async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
+    data=summary(request, body.from_date, body.to_date, "self", None, db)
     safe={"income":data["income"],"spent":data["spent"],"available":data["available"],"categories":data["categories"][:10]}
     try: answer=await ask_model(db,body.question,safe)
     except Exception as e: raise HTTPException(400,str(e))
