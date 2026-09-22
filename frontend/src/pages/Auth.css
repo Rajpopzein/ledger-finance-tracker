@@ -15,3 +15,8 @@
 .auth-security span{color:var(--muted);font-size:11px;line-height:1.5}
 .profile-copy{min-width:0;flex:1}
 .signout{padding:6px 8px;font-size:10px}
+
+
+.auth-mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#0d0e13;border:1px solid var(--line);padding:5px;border-radius:12px;margin-bottom:22px}
+.auth-mode-tabs button{border:0;background:transparent;color:var(--muted);padding:9px 12px;border-radius:9px;cursor:pointer;font-weight:650}
+.auth-mode-tabs button.active{background:var(--panel3);color:var(--text)}
