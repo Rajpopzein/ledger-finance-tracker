@@ -4,6 +4,31 @@ from sqlalchemy import String, DateTime, Numeric, Boolean, ForeignKey, Text, Uni
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    handle: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    password_salt: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class FamilyLink(Base):
+    __tablename__ = "family_links"
+    __table_args__ = (
+        UniqueConstraint("requester_user_id", "target_user_id", name="uq_family_link_pair"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requester_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    target_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    requester_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    target_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class Owner(Base):
     __tablename__ = "owners"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -15,6 +40,7 @@ class Owner(Base):
 class Account(Base):
     __tablename__ = "accounts"
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100))
     institution: Mapped[str] = mapped_column(String(100))
     account_mask: Mapped[str | None] = mapped_column(String(8), nullable=True)
@@ -40,6 +66,7 @@ class FamilyMember(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), nullable=True, index=True)
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True, index=True)
     family_member_id: Mapped[int | None] = mapped_column(ForeignKey("family_members.id"), nullable=True, index=True)
