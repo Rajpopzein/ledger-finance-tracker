@@ -83,11 +83,19 @@ export default function UPIImport({accounts}:Props){
           }
           <input
             type="file"
-            accept=".csv,.xlsx,.xls,.json,.pdf"
+            accept=".csv,.xlsx,.xls,.json,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json"
             disabled={busy!=='idle'}
             onChange={e=>{
               const selected=e.target.files?.[0]
-              if(selected)inspect(selected)
+              if(selected){
+                const name=selected.name.toLowerCase()
+                const allowed=name.endsWith('.csv')||name.endsWith('.xlsx')||name.endsWith('.xls')||name.endsWith('.json')||name.endsWith('.pdf')||selected.type==='application/pdf'
+                if(!allowed){
+                  setError('Unsupported file. Choose CSV, XLSX, XLS, JSON or PDF.')
+                }else{
+                  inspect(selected)
+                }
+              }
               e.currentTarget.value=''
             }}
           />
