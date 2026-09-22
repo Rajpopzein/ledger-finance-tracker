@@ -2,14 +2,15 @@ import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import ImportBatch, Transaction, TransactionSource
+from .models import Account, ImportBatch, Transaction, TransactionSource
 from .services.dedupe import fingerprint, normalize_text
 from .services.importer import parse_statement
+from .users import current_user_id
 
 router = APIRouter()
 
@@ -22,10 +23,15 @@ def _fallback_key(txn_at, amount, description):
 
 @router.post("/api/imports/reprocess")
 async def reprocess_statement(
+    request: Request,
     account_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    user_id = current_user_id(request)
+    account = db.get(Account, account_id)
+    if not account or account.user_id != user_id:
+        raise HTTPException(404, "Account not found")
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
 
@@ -98,6 +104,7 @@ async def reprocess_statement(
             )
 
         tx = Transaction(
+            user_id=user_id,
             account_id=account_id,
             category_id=preserved["category_id"] if preserved else None,
             txn_at=row["txn_at"],
