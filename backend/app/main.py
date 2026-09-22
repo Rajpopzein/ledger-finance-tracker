@@ -26,10 +26,8 @@ from .users import router as users_router, linked_user_ids, current_user_id
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
-    hash_password,
     verify_password,
     create_session,
-    read_session,
     read_session_claims,
 )
 
