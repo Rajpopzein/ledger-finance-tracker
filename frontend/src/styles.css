@@ -14,3 +14,13 @@
 .commit-status{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--muted);font-size:12px}
 @keyframes ledger-spin{to{transform:rotate(360deg)}}
 @keyframes ledger-progress{0%{transform:translateX(-120%)}50%{transform:translateX(130%)}100%{transform:translateX(300%)}}
+
+.dashboard-state{display:flex;align-items:center;gap:14px;min-height:86px;margin-bottom:18px}
+.dashboard-state>div:last-child{display:grid;gap:4px}
+.dashboard-state span{color:var(--muted);font-size:12px}
+.error-state{border-color:rgba(255,180,171,.25)}
+.period-empty{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}
+.period-empty div{display:grid;gap:5px}
+.period-empty span{color:var(--muted);font-size:12px}
+.inline-link{border:0;background:transparent;color:var(--green);padding:0;cursor:pointer;font-weight:650}
+@media(max-width:700px){.period-empty{align-items:flex-start;flex-direction:column}.dashboard-state{align-items:flex-start}}
