@@ -62,7 +62,7 @@ function TemplatePreview({blocks}:{blocks:readonly string[]}){
   </Box>
 }
 
-export default function Settings(){
+export default function Settings({embedded=false}:{embedded?:boolean}){
   const {themeMode,dashboardTemplate,setThemeMode,setDashboardTemplate,savePreferences,loading:preferencesSaving,resolvedMode}=useUI()
   const [s,setS]=useState<any>({
     provider:'',base_url:'',model:'',api_key:'',context_limit:'',temperature:0.2,
@@ -100,14 +100,14 @@ export default function Settings(){
 
   const clay=claySx(resolvedMode)
 
-  return <Stack spacing={2.5}>
-    <Box>
+  return <Stack spacing={embedded?2:2.5}>
+    {!embedded&&<Box>
       <Typography variant="overline" color="text.secondary">CONFIGURATION</Typography>
       <Typography variant="h1">Settings</Typography>
       <Typography color="text.secondary" sx={{mt:.7}}>Personalize Ledger, manage your accounts and configure AI privacy.</Typography>
-    </Box>
+    </Box>}
 
-    <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+    <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{mb:2}}>
         <DashboardCustomizeRoundedIcon color="primary"/>
         <Box>
@@ -171,7 +171,7 @@ export default function Settings(){
     </Paper>
 
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:2}}>
-      <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+      <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
         <Typography variant="h2">Bank accounts</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mb:2}}>Only your own accounts are shown here.</Typography>
 
@@ -198,7 +198,7 @@ export default function Settings(){
         </Stack>
       </Paper>
 
-      <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+      <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
         <Typography variant="h2">AI provider</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mb:2}}>Configuration and API keys are private to your user account.</Typography>
 
@@ -227,7 +227,7 @@ export default function Settings(){
       </Paper>
     </Box>
 
-    <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+    <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
       <Typography variant="h2">AI privacy</Typography>
       <Typography variant="body2" color="text.secondary" sx={{mb:1.5}}>Choose what calculated data may be sent to your configured model.</Typography>
 
