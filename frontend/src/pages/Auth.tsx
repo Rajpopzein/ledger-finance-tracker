@@ -3,53 +3,53 @@ import {api} from '../api/client'
 import './Auth.css'
 
 export default function Auth({setupRequired,onAuthenticated}:{setupRequired:boolean,onAuthenticated:()=>void}){
-  const [mode,setMode]=useState<'login'|'family-signup'>(setupRequired?'login':'login')
-  const [memberCode,setMemberCode]=useState('')
+  const [mode,setMode]=useState<'login'|'signup'>(setupRequired?'signup':'login')
+  const [name,setName]=useState('')
+  const [handle,setHandle]=useState('')
   const [email,setEmail]=useState('')
   const [password,setPassword]=useState('')
   const [confirm,setConfirm]=useState('')
   const [error,setError]=useState('')
   const [busy,setBusy]=useState(false)
 
-  const familySignup=!setupRequired&&mode==='family-signup'
+  const signup=mode==='signup'
 
-  function switchMode(next:'login'|'family-signup'){
+  function switchMode(next:'login'|'signup'){
     setMode(next)
     setError('')
     setPassword('')
     setConfirm('')
-    setMemberCode('')
   }
 
   async function submit(e:FormEvent){
     e.preventDefault()
     setError('')
 
-    const creatingOwner=setupRequired
-    const creatingFamily=familySignup
-
-    if((creatingOwner||creatingFamily) && password!==confirm){
-      setError('Passwords do not match.')
-      return
-    }
-    if((creatingOwner||creatingFamily) && password.length<12){
-      setError('Use at least 12 characters.')
-      return
-    }
-    if(creatingFamily && !memberCode.trim()){
-      setError('Enter the Member ID created by the Ledger owner.')
-      return
+    if(signup){
+      if(!name.trim()){
+        setError('Enter your name.')
+        return
+      }
+      if(handle.trim().length<3){
+        setError('Choose a handle with at least 3 characters.')
+        return
+      }
+      if(password!==confirm){
+        setError('Passwords do not match.')
+        return
+      }
+      if(password.length<12){
+        setError('Use at least 12 characters.')
+        return
+      }
     }
 
     setBusy(true)
     try{
-      if(creatingOwner){
-        await api.setupOwner(email,password)
-      }else if(creatingFamily){
-        await api.familySignup(memberCode.trim(),email,password)
-      }else{
-        await api.login(email,password)
+      if(signup){
+        await api.signup(name.trim(),handle.trim(),email,password)
       }
+      await api.login(email,password)
       onAuthenticated()
     }catch(err:any){
       setError(err.message||'Authentication failed')
@@ -58,41 +58,46 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     }
   }
 
-  const title=setupRequired
-    ? 'Create your owner account'
-    : familySignup
-      ? 'Create family account'
-      : 'Sign in'
-
-  const description=setupRequired
-    ? 'This first account becomes the owner of this Ledger installation.'
-    : familySignup
-      ? 'Use the Member ID given to you by the Ledger owner.'
-      : 'Sign in as the owner or a registered family member.'
-
   return <div className="auth-page">
     <div className="auth-card">
       <div className="auth-brand"><div className="logo">₹</div><b>LEDGER</b></div>
 
-      {!setupRequired&&<div className="auth-mode-tabs">
+      <div className="auth-mode-tabs">
         <button type="button" className={mode==='login'?'active':''} onClick={()=>switchMode('login')}>Sign in</button>
-        <button type="button" className={mode==='family-signup'?'active':''} onClick={()=>switchMode('family-signup')}>Sign up</button>
-      </div>}
+        <button type="button" className={mode==='signup'?'active':''} onClick={()=>switchMode('signup')}>Sign up</button>
+      </div>
 
-      <small>{setupRequired?'PRIVATE SETUP':familySignup?'FAMILY SIGNUP':'PRIVATE ACCESS'}</small>
-      <h1>{title}</h1>
-      <p>{description}</p>
+      <small>{signup?'CREATE ACCOUNT':'PRIVATE ACCESS'}</small>
+      <h1>{signup?'Create your Ledger account':'Sign in'}</h1>
+      <p>{signup?'Create your own account first. You can link family members later using their @handle.':'Use your personal Ledger account.'}</p>
 
       <form onSubmit={submit}>
-        {familySignup&&<label>
-          Member ID
+        {signup&&<label>
+          Name
           <input
-            value={memberCode}
-            autoComplete="off"
+            value={name}
+            autoComplete="name"
             required
-            placeholder="e.g. FAMILY-002"
-            onChange={e=>setMemberCode(e.target.value)}
+            maxLength={100}
+            onChange={e=>setName(e.target.value)}
           />
+        </label>}
+
+        {signup&&<label>
+          Ledger ID / Handle
+          <div className="auth-handle-input">
+            <span>@</span>
+            <input
+              value={handle}
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              required
+              maxLength={40}
+              placeholder="raj"
+              onChange={e=>setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,''))}
+            />
+          </div>
         </label>}
 
         <label>
@@ -110,14 +115,14 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
           Password
           <input
             type="password"
-            autoComplete={setupRequired||familySignup?'new-password':'current-password'}
+            autoComplete={signup?'new-password':'current-password'}
             required
             value={password}
             onChange={e=>setPassword(e.target.value)}
           />
         </label>
 
-        {(setupRequired||familySignup)&&<label>
+        {signup&&<label>
           Confirm password
           <input
             type="password"
@@ -128,18 +133,20 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
           />
         </label>}
 
-        {(setupRequired||familySignup)&&<div className="auth-hint">Minimum 12 characters. Use a unique password.</div>}
-        {familySignup&&<div className="auth-hint">The Member ID must already exist in Settings → Family members.</div>}
+        {signup&&<div className="auth-hint">
+          Your handle is unique, for example <b>@raj</b>. Password minimum: 12 characters.
+        </div>}
+
         {error&&<div className="auth-error">{error}</div>}
 
         <button className="primary auth-submit" disabled={busy}>
-          {busy?'Please wait…':setupRequired?'Create owner account':familySignup?'Create family account':'Sign in'}
+          {busy?'Please wait…':signup?'Create account':'Sign in'}
         </button>
       </form>
 
       <div className="auth-security">
-        <b>Protected session</b>
-        <span>Owner and family sessions use HttpOnly cookies. Family accounts are restricted to their own ledger view.</span>
+        <b>Independent account</b>
+        <span>Family linking happens after signup and does not share your password or merge your account.</span>
       </div>
     </div>
   </div>
