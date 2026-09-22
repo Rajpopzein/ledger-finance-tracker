@@ -67,7 +67,7 @@ async def auth_guard(request: Request, call_next):
     if request.method == "OPTIONS" or not path.startswith("/api/") or path in PUBLIC_API_PATHS:
         return await call_next(request)
 
-    claims = read_session_claims(request.cookies.get(SESSION_COOKIE))
+    claims = read_session_claims(_session_token_from_request(request))
     if not claims:
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
 
@@ -92,6 +92,16 @@ def startup():
 def health():
     return {"status": "ok"}
 
+def _session_token_from_request(request: Request):
+    cookie_token = request.cookies.get(SESSION_COOKIE)
+    if cookie_token:
+        return cookie_token
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+        return token or None
+    return None
+
 def _set_session_cookie(response: Response, request: Request, token: str):
     forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
     secure = request.url.scheme == "https" or forwarded == "https"
@@ -108,7 +118,7 @@ def _set_session_cookie(response: Response, request: Request, token: str):
 @app.get("/api/auth/status")
 def auth_status(request: Request, db: Session = Depends(get_db)):
     owner = db.get(Owner, 1)
-    claims = read_session_claims(request.cookies.get(SESSION_COOKIE))
+    claims = read_session_claims(_session_token_from_request(request))
     if not claims:
         return {
             "setup_required": owner is None and db.scalar(select(func.count(User.id))) == 0,
@@ -159,15 +169,17 @@ def auth_login(body: OwnerLogin, request: Request, response: Response, db: Sessi
     email = str(body.email).strip().lower()
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     if user is not None and verify_password(body.password, user.password_salt, user.password_hash):
-        _set_session_cookie(response, request, create_session(user.id, "user"))
-        return {"ok": True, "email": user.email, "role": "user"}
+        token = create_session(user.id, "user")
+        _set_session_cookie(response, request, token)
+        return {"ok": True, "email": user.email, "role": "user", "session_token": token}
 
     owner = db.scalar(select(Owner).where(func.lower(Owner.email) == email))
     if owner is not None and verify_password(body.password, owner.password_salt, owner.password_hash):
         migrated = db.scalar(select(User).where(func.lower(User.email) == email))
         if migrated:
-            _set_session_cookie(response, request, create_session(migrated.id, "user"))
-            return {"ok": True, "email": migrated.email, "role": "user"}
+            token = create_session(migrated.id, "user")
+            _set_session_cookie(response, request, token)
+            return {"ok": True, "email": migrated.email, "role": "user", "session_token": token}
 
     raise HTTPException(401, "Invalid email or password")
 
