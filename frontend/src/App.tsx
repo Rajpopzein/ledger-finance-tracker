@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react'
 import {Routes,Route} from 'react-router-dom'
+import {Box,CircularProgress,Typography} from '@mui/material'
 import Layout from './components/Layout'
 import Overview from './pages/Overview'
 import Transactions from './pages/Transactions'
@@ -19,7 +20,9 @@ export default function App(){
 
   useEffect(()=>{refreshAuth()},[])
 
-  if(!auth)return <div className="loading">Checking secure session…</div>
+  if(!auth)return <Box sx={{minHeight:'100dvh',display:'grid',placeItems:'center',bgcolor:'background.default'}}>
+    <Box sx={{textAlign:'center'}}><CircularProgress size={30}/><Typography color="text.secondary" sx={{mt:1.2}}>Checking secure session…</Typography></Box>
+  </Box>
   if(!auth.authenticated)return <Auth setupRequired={!!auth.setup_required} onAuthenticated={refreshAuth}/>
 
   return <Routes>
