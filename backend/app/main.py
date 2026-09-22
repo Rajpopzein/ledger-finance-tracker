@@ -511,7 +511,7 @@ def save_ai_settings(body:AISettingsIn, db:Session=Depends(get_db)):
 
 @app.post("/api/ai/ask")
 async def ai_ask(body:AIQuestion, db:Session=Depends(get_db)):
-    data=summary(body.from_date, body.to_date, db)
+    data=summary(body.from_date, body.to_date, "self", None, db)
     safe={"income":data["income"],"spent":data["spent"],"available":data["available"],"categories":data["categories"][:10]}
     try: answer=await ask_model(db,body.question,safe)
     except Exception as e: raise HTTPException(400,str(e))
