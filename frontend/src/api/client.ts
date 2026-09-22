@@ -39,18 +39,30 @@ export const api={
  setupOwner:(email:string,password:string)=>req<any>('/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
  login:(email:string,password:string)=>req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
  logout:()=>req<any>('/auth/logout',{method:'POST'}),
- summary:(from?:string,to?:string)=>req<any>(`/summary${dateQs(from,to)}`),
- transactions:(q='',from?:string,to?:string)=>{
+ summary:(from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
+   const p=new URLSearchParams()
+   if(from)p.set('from_date',from)
+   if(to)p.set('to_date',to)
+   p.set('family_scope',familyScope)
+   if(familyMemberId)p.set('family_member_id',String(familyMemberId))
+   return req<any>(`/summary?${p.toString()}`)
+ },
+ transactions:(q='',from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
    const p=new URLSearchParams()
    if(q)p.set('q',q)
    if(from)p.set('from_date',from)
    if(to)p.set('to_date',to)
+   p.set('family_scope',familyScope)
+   if(familyMemberId)p.set('family_member_id',String(familyMemberId))
    const s=p.toString()
    return req<any[]>(`/transactions${s?`?${s}`:''}`)
  },
  accounts:()=>req<any[]>('/accounts'),
  createAccount:(body:any)=>req<any>('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  categories:()=>req<any[]>('/categories'),
+ familyMembers:()=>req<any[]>('/family-members'),
+ createFamilyMember:(body:{member_code:string;name:string})=>req<any>('/family-members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ tagTransactionFamily:(txId:number,familyMemberId:number|null)=>req<any>(`/transactions/${txId}/family-member`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({family_member_id:familyMemberId})}),
  cash:(body:any)=>req('/transactions/cash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  preview:(accountId:number,file:File)=>{
    const f=new FormData()
