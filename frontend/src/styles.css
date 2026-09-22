@@ -2,3 +2,15 @@
 .period button{border:0;background:transparent;color:var(--muted);padding:6px 10px;font-size:12px;border-radius:7px;cursor:pointer}.period button.active{background:var(--panel3);color:var(--text)}
 .empty{padding:22px 4px;color:var(--muted);font-size:13px}.ledger-empty{padding:28px 16px}.flow-bars{height:210px;display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:end;padding-top:20px}.flow-month{height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px}.flow-pair{height:160px;display:flex;align-items:flex-end;gap:5px}.flow-pair i{width:14px;display:block;border-radius:4px 4px 2px 2px}.flow-pair .income{background:var(--green)}.flow-pair .spent{background:var(--blue)}.flow-month small{font-size:10px;color:var(--muted)}.account-list{margin:12px 0}.settings-privacy{margin-top:18px}
 @media(max-width:980px){.period button:not(.active){display:none}.flow-bars{gap:4px}.flow-pair i{width:10px}}
+
+.drop{position:relative}
+.drop small{color:var(--muted);font-size:10px;line-height:1.5;max-width:320px}
+.drop-busy{cursor:progress;border-color:rgba(78,222,163,.35);background:rgba(78,222,163,.035)}
+.upload-spinner{width:28px;height:28px;border:3px solid rgba(78,222,163,.18);border-top-color:var(--green);border-radius:50%;animation:ledger-spin .8s linear infinite}
+.upload-spinner.small{width:16px;height:16px;border-width:2px}
+.upload-progress{width:min(360px,78%);height:7px;background:#0d0e13;border-radius:999px;overflow:hidden;margin-top:4px}
+.upload-progress i{display:block;width:38%;height:100%;background:var(--green);border-radius:999px;animation:ledger-progress 1.1s ease-in-out infinite}
+.import-file-name{color:var(--muted);font-size:11px;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commit-status{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--muted);font-size:12px}
+@keyframes ledger-spin{to{transform:rotate(360deg)}}
+@keyframes ledger-progress{0%{transform:translateX(-120%)}50%{transform:translateX(130%)}100%{transform:translateX(300%)}}
