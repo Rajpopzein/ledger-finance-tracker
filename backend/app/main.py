@@ -588,22 +588,27 @@ def commit(token:str, request:Request, db:Session=Depends(get_db)):
     return {"inserted":inserted,"matched":matched,"review":review,"batch_id":batch.id}
 
 @app.get("/api/ai/settings")
-def get_ai_settings(db:Session=Depends(get_db)):
-    s=db.get(AISetting,1)
+def get_ai_settings(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    s=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
     if not s: return {"provider":None,"status":"not_configured"}
     return {"provider":s.provider,"base_url":s.base_url,"model":s.model,"context_limit":s.context_limit,"temperature":float(s.temperature),"allow_amounts":s.allow_amounts,"allow_merchants":s.allow_merchants,"allow_categories":s.allow_categories,"allow_dates":s.allow_dates,"allow_balances":s.allow_balances,"allow_notes":s.allow_notes,"has_api_key":bool(s.api_key_encrypted),"status":"configured" if s.provider and s.model else "not_configured"}
 
 @app.put("/api/ai/settings")
-def save_ai_settings(body:AISettingsIn, db:Session=Depends(get_db)):
-    s=db.get(AISetting,1) or AISetting(id=1)
+def save_ai_settings(body:AISettingsIn, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    s=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
+    if not s:
+        s=AISetting(user_id=user_id)
     s.provider=body.provider;s.base_url=body.base_url;s.model=body.model;s.context_limit=body.context_limit;s.temperature=Decimal(str(body.temperature));s.allow_amounts=body.allow_amounts;s.allow_merchants=body.allow_merchants;s.allow_categories=body.allow_categories;s.allow_dates=body.allow_dates;s.allow_balances=body.allow_balances;s.allow_notes=body.allow_notes
     if body.api_key: s.api_key_encrypted=encrypt(body.api_key)
     db.add(s);db.commit();return {"ok":True}
 
 @app.post("/api/ai/ask")
 async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
     data=summary(request, body.from_date, body.to_date, "self", None, db)
     safe={"income":data["income"],"spent":data["spent"],"available":data["available"],"categories":data["categories"][:10]}
-    try: answer=await ask_model(db,body.question,safe)
+    try: answer=await ask_model(db,user_id,body.question,safe)
     except Exception as e: raise HTTPException(400,str(e))
     return {"answer":answer,"calculated":safe}
