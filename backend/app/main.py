@@ -236,9 +236,27 @@ def summary(from_date:date|None=None, to_date:date|None=None, db:Session=Depends
 async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Session=Depends(get_db)):
     content=await file.read(); file_hash=hashlib.sha256(content).hexdigest()
     existing_batch=db.scalar(select(ImportBatch).where(ImportBatch.account_id==account_id,ImportBatch.file_hash==file_hash))
-    if existing_batch: return {"already_imported":True,"batch_id":existing_batch.id,"new":0,"existing":0,"matched":0,"review":0,"items":[]}
-    try: rows=parse_statement(file.filename or "statement.csv",content)
-    except ValueError as e: raise HTTPException(400,str(e))
+    if existing_batch:
+        existing_source=db.scalar(
+            select(TransactionSource.id)
+            .join(Transaction, TransactionSource.transaction_id==Transaction.id)
+            .where(
+                Transaction.account_id==account_id,
+                TransactionSource.external_hash==file_hash,
+            )
+            .limit(1)
+        )
+        if existing_source:
+            return {"already_imported":True,"batch_id":existing_batch.id,"new":0,"existing":0,"matched":0,"review":0,"items":[]}
+    try:
+        rows=parse_statement(file.filename or "statement.csv",content)
+    except ValueError as e:
+        raise HTTPException(400,str(e))
+    if not rows:
+        raise HTTPException(
+            400,
+            "No transaction rows could be parsed from this statement. Check the bank CSV/XLSX headers and date/amount columns."
+        )
     classified=[]; counts={"new":0,"existing":0,"matched":0,"review":0}
     for row in rows:
         match,method,score=find_match(db,account_id=account_id,txn_at=row["txn_at"],amount=row["amount"],direction=row["direction"],description=row["description"],bank_ref=row.get("bank_ref"))
@@ -249,15 +267,33 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
             state="review"
         counts[state]+=1
         classified.append({**row,"amount":str(row["amount"]),"state":state,"match_id":match.id if match else None,"match_method":method,"score":score})
-    token=str(uuid.uuid4()); PREVIEWS[token]={"account_id":account_id,"file_name":file.filename,"file_hash":file_hash,"items":classified}
+    token=str(uuid.uuid4())
+    PREVIEWS[token]={
+        "account_id":account_id,
+        "file_name":file.filename,
+        "file_hash":file_hash,
+        "items":classified,
+        "existing_batch_id":existing_batch.id if existing_batch else None,
+    }
     return {"preview_token":token,"already_imported":False,"detected":len(rows),**counts,"items":classified[:100]}
 
 @app.post("/api/imports/commit/{token}")
 def commit(token:str, db:Session=Depends(get_db)):
     data=PREVIEWS.pop(token,None)
     if not data: raise HTTPException(404,"Preview expired")
-    batch=ImportBatch(account_id=data["account_id"],file_name=data["file_name"],file_hash=data["file_hash"],status="committed")
-    db.add(batch); db.flush(); inserted=matched=review=0
+    if not data["items"]:
+        raise HTTPException(400,"Cannot commit an empty import")
+    batch=None
+    if data.get("existing_batch_id"):
+        batch=db.get(ImportBatch,data["existing_batch_id"])
+    if batch:
+        batch.file_name=data["file_name"]
+        batch.status="committed"
+        batch.imported_at=datetime.now(timezone.utc)
+    else:
+        batch=ImportBatch(account_id=data["account_id"],file_name=data["file_name"],file_hash=data["file_hash"],status="committed")
+        db.add(batch)
+    db.flush(); inserted=matched=review=0
     for row in data["items"]:
         amount=Decimal(row["amount"])
         if row["state"] in ("existing", "matched") and row["match_id"]:
