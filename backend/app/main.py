@@ -2,29 +2,140 @@ import hashlib, uuid
 from collections import defaultdict
 from datetime import datetime, timezone, date, time, timedelta
 from decimal import Decimal
-from fastapi import FastAPI, Depends, File, Form, HTTPException, UploadFile
+from urllib.parse import urlparse
+
+from fastapi import FastAPI, Depends, File, Form, HTTPException, UploadFile, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, AISetting
-from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion
+from .models import Account, Category, Transaction, TransactionSource, ImportBatch, AISetting, Owner
+from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
 from .services.ai import ask_model
+from .services.auth import (
+    SESSION_COOKIE,
+    SESSION_MAX_AGE,
+    hash_password,
+    verify_password,
+    create_session,
+    read_session,
+)
 
 app = FastAPI(title="Ledger v1 API")
-app.add_middleware(CORSMiddleware, allow_origins=[x.strip() for x in settings.cors_origins.split(",")], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-PREVIEWS={}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+PREVIEWS = {}
+
+PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/auth/status",
+    "/api/auth/setup",
+    "/api/auth/login",
+    "/api/auth/logout",
+}
+
+def _origin_allowed(request: Request, origin: str) -> bool:
+    try:
+        if urlparse(origin).netloc == request.headers.get("host", ""):
+            return True
+    except Exception:
+        return False
+    configured = {x.strip().rstrip("/") for x in settings.cors_origins.split(",") if x.strip()}
+    return origin.rstrip("/") in configured
+
+@app.middleware("http")
+async def auth_guard(request: Request, call_next):
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in PUBLIC_API_PATHS:
+        return await call_next(request)
+
+    owner_id = read_session(request.cookies.get(SESSION_COOKIE))
+    if owner_id != 1:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin and not _origin_allowed(request, origin):
+            return JSONResponse({"detail": "Origin not allowed"}, status_code=403)
+
+    return await call_next(request)
 
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
 
 @app.get("/api/health")
-def health(): return {"status":"ok"}
+def health():
+    return {"status": "ok"}
+
+def _set_session_cookie(response: Response, request: Request, token: str):
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    secure = request.url.scheme == "https" or forwarded == "https"
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=SESSION_MAX_AGE,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+
+@app.get("/api/auth/status")
+def auth_status(request: Request, db: Session = Depends(get_db)):
+    owner = db.get(Owner, 1)
+    session_owner = read_session(request.cookies.get(SESSION_COOKIE))
+    return {
+        "setup_required": owner is None,
+        "authenticated": owner is not None and session_owner == owner.id,
+        "email": owner.email if owner is not None and session_owner == owner.id else None,
+    }
+
+@app.post("/api/auth/setup")
+def auth_setup(body: OwnerSetup, request: Request, response: Response, db: Session = Depends(get_db)):
+    if db.get(Owner, 1) is not None:
+        raise HTTPException(409, "Owner account is already configured")
+
+    email = str(body.email).strip().lower()
+    salt, password_hash = hash_password(body.password)
+    token = create_session(1)
+    owner = Owner(id=1, email=email, password_salt=salt, password_hash=password_hash)
+    db.add(owner)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Owner account is already configured")
+
+    _set_session_cookie(response, request, token)
+    return {"ok": True, "email": email}
+
+@app.post("/api/auth/login")
+def auth_login(body: OwnerLogin, request: Request, response: Response, db: Session = Depends(get_db)):
+    email = str(body.email).strip().lower()
+    owner = db.scalar(select(Owner).where(func.lower(Owner.email) == email))
+    if owner is None or not verify_password(body.password, owner.password_salt, owner.password_hash):
+        raise HTTPException(401, "Invalid email or password")
+
+    _set_session_cookie(response, request, create_session(owner.id))
+    return {"ok": True, "email": owner.email}
+
+@app.post("/api/auth/logout")
+def auth_logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
 
 @app.get("/api/accounts")
 def accounts(db:Session=Depends(get_db)):
