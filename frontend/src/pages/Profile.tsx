@@ -183,9 +183,9 @@ export default function Profile(){
         <TextField
           label="Ledger ID"
           value={profile.handle||''}
-          disabled
           helperText="System generated. This ID cannot be changed."
           InputProps={{
+            readOnly:true,
             endAdornment:<InputAdornment position="end">
               <Button size="small" onClick={copyId} startIcon={<ContentCopyRoundedIcon fontSize="small"/>}>Copy</Button>
             </InputAdornment>
