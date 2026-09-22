@@ -319,18 +319,25 @@ def transactions(
     from_date:date|None=None,
     to_date:date|None=None,
     family_scope:str="self",
-    family_member_id:int|None=None,
+    family_user_id:int|None=None,
     db:Session=Depends(get_db),
 ):
-    claims=getattr(request.state,"auth",None)
-    if claims and claims.get("role")=="family":
-        family_scope="all"
-        family_member_id=int(claims["sub"])
-    stmt=_filtered_stmt(from_date,to_date,family_scope,family_member_id).order_by(Transaction.txn_at.desc()).limit(500)
+    user_ids=_scope_user_ids(request,db,family_scope,family_user_id)
+    stmt=_filtered_stmt(from_date,to_date,user_ids).order_by(Transaction.txn_at.desc()).limit(500)
     items=db.scalars(stmt).all()
     if q:
-        needle=q.lower(); items=[t for t in items if needle in (t.merchant or "").lower() or needle in (t.description_raw or "").lower() or needle in (t.bank_ref or "").lower() or needle in (t.upi_ref or "").lower()]
-    if status: items=[t for t in items if t.verification_status==status]
+        needle=q.lower()
+        items=[
+            t for t in items
+            if needle in (t.merchant or "").lower()
+            or needle in (t.description_raw or "").lower()
+            or needle in (t.bank_ref or "").lower()
+            or needle in (t.upi_ref or "").lower()
+            or needle in (t.user.name if t.user else "").lower()
+            or needle in (t.user.handle if t.user else "").lower()
+        ]
+    if status:
+        items=[t for t in items if t.verification_status==status]
     return [serialize_tx(t) for t in items]
 
 def serialize_tx(t):
@@ -347,9 +354,9 @@ def serialize_tx(t):
         "excluded":t.excluded_from_analytics,
         "account":t.account.name if t.account else "Cash",
         "category":t.category.name if t.category else "Uncategorized",
-        "family_member":(
-            {"id":t.family_member.id,"member_code":t.family_member.member_code,"name":t.family_member.name}
-            if t.family_member else None
+        "user":(
+            {"id":t.user.id,"name":t.user.name,"handle":f"@{t.user.handle}"}
+            if t.user else None
         ),
         "sources":[{"type":src.source_type,"name":src.source_name} for src in t.sources],
     }
@@ -451,18 +458,14 @@ def summary(
     family_totals=defaultdict(Decimal)
     family_meta={}
     for t in family_items:
-        if t.direction!="debit" or t.txn_type in ("internal_transfer","investment"):
+        if t.direction!="debit" or t.txn_type in ("internal_transfer","investment") or not t.user:
             continue
-        if t.family_member:
-            key=f"member:{t.family_member.id}"
-            family_meta[key]={
-                "id":t.family_member.id,
-                "member_code":t.family_member.member_code,
-                "name":t.family_member.name,
-            }
-        else:
-            key="self"
-            family_meta[key]={"id":None,"member_code":"SELF","name":"Self"}
+        key=f"user:{t.user.id}"
+        family_meta[key]={
+            "id":t.user.id,
+            "handle":f"@{t.user.handle}",
+            "name":t.user.name,
+        }
         family_totals[key]+=t.amount
 
     family_spending=[
