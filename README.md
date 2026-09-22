@@ -1,14 +1,19 @@
-# Ledger v1.1
+# Ledger v1.2
 
-A lean, local-first personal finance tracker based on the approved UI.
+A lean, local-first personal finance tracker with a private single-owner authentication flow.
 
 ## Important: this build starts empty
 
-There is **no demo/seed transaction data**. Add a bank account in **Settings**, then import your own CSV/XLSX statement, or add a cash expense.
+There is **no demo/seed transaction data**. On first launch, create the owner account, then add a bank account in **Settings** and import your own CSV/XLSX statement, or add a cash expense.
 
-This updated bundle uses a new `ledger_db_v11` Docker volume, so it starts with an empty ledger even if you ran the older demo build. The older demo volume is left untouched and is not used by this version.
+The Docker workflow uses the `ledger_db_v11` volume, so it starts with an empty ledger unless that volume already exists.
 
 ## Included
+- First-run single-owner account setup
+- Email/password login and logout
+- Secure HttpOnly session cookie
+- Backend authentication guard on finance/API routes
+- Origin checks for state-changing API requests
 - Overview: real Income, Spent, Available, verification health, category totals and recent activity
 - Working period selector: current month, previous month, last 3 months
 - Cash-flow visualization built from actual ledger data only
@@ -35,7 +40,8 @@ This updated bundle uses a new `ledger_db_v11` Docker volume, so it starts with 
 - Subscription/mandate monitoring
 - Split bill / reimbursement workflows
 - Receipt downloads
-- Authentication (single-user local v1)
+- Multi-user accounts / roles
+- MFA / passkeys
 
 ## Run
 
@@ -48,11 +54,25 @@ Open:
 - API docs: http://localhost:8000/docs
 
 ## First use
-1. Open **Settings**.
-2. Add a bank/institution and optional last 4 digits.
-3. Open **Import & Review**.
-4. Select that account and upload a CSV/XLSX statement.
-5. Review the import summary before committing.
+1. Open the app and create the first owner account.
+2. Use a unique password with at least 12 characters.
+3. Open **Settings**.
+4. Add a bank/institution and optional last 4 digits.
+5. Open **Import & Review**.
+6. Select that account and upload a CSV/XLSX statement.
+7. Review the import summary before committing.
+
+## Authentication
+Only these API endpoints are public:
+- `/api/health`
+- `/api/auth/status`
+- `/api/auth/setup`
+- `/api/auth/login`
+- `/api/auth/logout`
+
+All finance, import, settings and AI API routes require a valid owner session.
+
+Passwords are stored as salted scrypt hashes. Session tokens are encrypted using the configured Fernet `SECRET_KEY` and delivered through an HttpOnly cookie. State-changing authenticated requests also enforce same-origin / configured-origin checks.
 
 ## Import format
 CSV/XLSX v1 detects common column names for:
@@ -71,16 +91,22 @@ If your bank uses unusual headers, the next increment should add the column-mapp
 5. Otherwise -> new transaction.
 
 ## AI privacy
-The backend never places raw bank statements, full account numbers, UPI IDs, or bank/UTR references into the AI prompt. API keys entered in Settings are encrypted at rest using a local Fernet key stored in the Docker volume.
+The backend never places raw bank statements, full account numbers, UPI IDs, or bank/UTR references into the AI prompt. AI API credentials are encrypted at rest using the same configured Fernet key.
 
 ## Vercel deployment
 
-The repository now includes a Vercel-compatible FastAPI entrypoint at `api/index.py` and builds the Vite frontend from `frontend/`.
+The repository includes a Vercel-compatible FastAPI entrypoint at `api/index.py` and builds the Vite frontend from `frontend/`.
 
 Required production environment variables:
 
-- `DATABASE_URL`: persistent hosted PostgreSQL connection string (for example Neon via the Vercel Marketplace)
-- `SECRET_KEY`: a stable Fernet key used to encrypt configured AI API keys
+- `DATABASE_URL`: persistent hosted PostgreSQL connection string
+- `SECRET_KEY`: a stable Fernet key used for sessions and encrypted AI credentials
 - `CORS_ORIGINS`: optional when frontend and API share the same Vercel origin
 
-The local Docker Compose workflow is unchanged.
+For Neon with psycopg, use the SQLAlchemy URL form:
+
+```
+postgresql+psycopg://USER:PASSWORD@HOST/DATABASE?sslmode=require
+```
+
+Never commit production database credentials or `SECRET_KEY` to GitHub.
