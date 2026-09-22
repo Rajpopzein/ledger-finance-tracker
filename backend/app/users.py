@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .models import FamilyLink, User
-from .schemas import FamilyLinkAction, FamilyLinkCreate, UserProfileUpdate, UserSignup
+from .schemas import FamilyLinkAction, FamilyLinkCreate, UserPreferencesUpdate, UserProfileUpdate, UserSignup
 from .services.auth import hash_password
 
 router = APIRouter()
@@ -131,6 +131,33 @@ def linked_user_ids(db: Session, user_id: int) -> list[int]:
             else link.requester_user_id
         )
     return list(dict.fromkeys(ids))
+
+@router.get("/api/preferences")
+def preferences(request: Request, db: Session = Depends(get_db)):
+    user = db.get(User, current_user_id(request))
+    if not user:
+        raise HTTPException(404, "User not found")
+    return {
+        "theme_mode": user.theme_mode or "dark",
+        "dashboard_template": user.dashboard_template or "balanced",
+    }
+
+@router.put("/api/preferences")
+def update_preferences(
+    body: UserPreferencesUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = db.get(User, current_user_id(request))
+    if not user:
+        raise HTTPException(404, "User not found")
+    user.theme_mode = body.theme_mode
+    user.dashboard_template = body.dashboard_template
+    db.commit()
+    return {
+        "theme_mode": user.theme_mode,
+        "dashboard_template": user.dashboard_template,
+    }
 
 @router.get("/api/family-network")
 def family_network(request: Request, db: Session = Depends(get_db)):
