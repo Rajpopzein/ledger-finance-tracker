@@ -1,8 +1,23 @@
 import {FormEvent,useState} from 'react'
+import {
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  InputAdornment,
+  Paper,
+  Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Typography,
+} from '@mui/material'
+import LockRoundedIcon from '@mui/icons-material/LockRounded'
 import {api} from '../api/client'
-import './Auth.css'
+import {claySx,useUI} from '../ui'
 
-export default function Auth({setupRequired,onAuthenticated}:{setupRequired:boolean,onAuthenticated:()=>void}){
+export default function Auth({setupRequired,onAuthenticated}:{setupRequired:boolean;onAuthenticated:()=>void}){
+  const {resolvedMode}=useUI()
   const [mode,setMode]=useState<'login'|'signup'>(setupRequired?'signup':'login')
   const [name,setName]=useState('')
   const [handle,setHandle]=useState('')
@@ -26,29 +41,15 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     setError('')
 
     if(signup){
-      if(!name.trim()){
-        setError('Enter your name.')
-        return
-      }
-      if(handle.trim().length<3){
-        setError('Choose a handle with at least 3 characters.')
-        return
-      }
-      if(password!==confirm){
-        setError('Passwords do not match.')
-        return
-      }
-      if(password.length<12){
-        setError('Use at least 12 characters.')
-        return
-      }
+      if(!name.trim())return setError('Enter your name.')
+      if(handle.trim().length<3)return setError('Choose a handle with at least 3 characters.')
+      if(password!==confirm)return setError('Passwords do not match.')
+      if(password.length<12)return setError('Use at least 12 characters.')
     }
 
     setBusy(true)
     try{
-      if(signup){
-        await api.signup(name.trim(),handle.trim(),email,password)
-      }
+      if(signup)await api.signup(name.trim(),handle.trim(),email,password)
       await api.login(email,password)
       onAuthenticated()
     }catch(err:any){
@@ -58,96 +59,101 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     }
   }
 
-  return <div className="auth-page">
-    <div className="auth-card">
-      <div className="auth-brand"><div className="logo">₹</div><b>LEDGER</b></div>
+  return <Box sx={{
+    minHeight:'100dvh',
+    display:'grid',
+    placeItems:'center',
+    bgcolor:'background.default',
+    p:2,
+  }}>
+    <Paper sx={{...claySx(resolvedMode),width:'100%',maxWidth:460,p:{xs:2.2,sm:3}}}>
+      <Stack direction="row" alignItems="center" spacing={1.2} sx={{mb:2}}>
+        <Avatar sx={{bgcolor:'primary.main',fontWeight:850}}>₹</Avatar>
+        <Box>
+          <Typography fontWeight={850} letterSpacing=".08em">LEDGER</Typography>
+          <Typography variant="caption" color="text.secondary">Private personal finance</Typography>
+        </Box>
+      </Stack>
 
-      <div className="auth-mode-tabs">
-        <button type="button" className={mode==='login'?'active':''} onClick={()=>switchMode('login')}>Sign in</button>
-        <button type="button" className={mode==='signup'?'active':''} onClick={()=>switchMode('signup')}>Sign up</button>
-      </div>
+      <Tabs
+        value={mode}
+        onChange={(_,value)=>switchMode(value)}
+        variant="fullWidth"
+        sx={{mb:2.5}}
+      >
+        <Tab value="login" label="Sign in"/>
+        <Tab value="signup" label="Sign up"/>
+      </Tabs>
 
-      <small>{signup?'CREATE ACCOUNT':'PRIVATE ACCESS'}</small>
-      <h1>{signup?'Create your Ledger account':'Sign in'}</h1>
-      <p>{signup?'Create your own account first. You can link family members later using their @handle.':'Use your personal Ledger account.'}</p>
+      <Typography variant="overline" color="text.secondary">{signup?'CREATE ACCOUNT':'PRIVATE ACCESS'}</Typography>
+      <Typography variant="h1" sx={{fontSize:'clamp(1.7rem,7vw,2.4rem)'}}>{signup?'Create your Ledger account':'Sign in'}</Typography>
+      <Typography color="text.secondary" sx={{mt:.8,mb:2.2}}>
+        {signup?'Create your own account first. Link family members later using their @handle.':'Use your personal Ledger account.'}
+      </Typography>
 
-      <form onSubmit={submit}>
-        {signup&&<label>
-          Name
-          <input
+      <Box component="form" onSubmit={submit}>
+        <Stack spacing={1.5}>
+          {signup&&<TextField
+            label="Name"
             value={name}
             autoComplete="name"
             required
-            maxLength={100}
+            inputProps={{maxLength:100}}
             onChange={e=>setName(e.target.value)}
-          />
-        </label>}
+          />}
 
-        {signup&&<label>
-          Ledger ID / Handle
-          <div className="auth-handle-input">
-            <span>@</span>
-            <input
-              value={handle}
-              autoComplete="off"
-              autoCapitalize="none"
-              autoCorrect="off"
-              required
-              maxLength={40}
-              placeholder="raj"
-              onChange={e=>setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,''))}
-            />
-          </div>
-        </label>}
+          {signup&&<TextField
+            label="Ledger ID / Handle"
+            value={handle}
+            required
+            inputProps={{maxLength:40}}
+            InputProps={{startAdornment:<InputAdornment position="start">@</InputAdornment>}}
+            placeholder="raj"
+            onChange={e=>setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,''))}
+            helperText="Unique ID used for family linking."
+          />}
 
-        <label>
-          Email
-          <input
+          <TextField
+            label="Email"
             type="email"
             autoComplete="username"
             required
             value={email}
             onChange={e=>setEmail(e.target.value)}
           />
-        </label>
 
-        <label>
-          Password
-          <input
+          <TextField
+            label="Password"
             type="password"
             autoComplete={signup?'new-password':'current-password'}
             required
             value={password}
             onChange={e=>setPassword(e.target.value)}
           />
-        </label>
 
-        {signup&&<label>
-          Confirm password
-          <input
+          {signup&&<TextField
+            label="Confirm password"
             type="password"
             autoComplete="new-password"
             required
             value={confirm}
             onChange={e=>setConfirm(e.target.value)}
-          />
-        </label>}
+          />}
 
-        {signup&&<div className="auth-hint">
-          Your handle is unique, for example <b>@raj</b>. Password minimum: 12 characters.
-        </div>}
+          {error&&<Alert severity="error">{error}</Alert>}
 
-        {error&&<div className="auth-error">{error}</div>}
+          <Button type="submit" variant="contained" size="large" disabled={busy}>
+            {busy?'Please wait…':signup?'Create account':'Sign in'}
+          </Button>
 
-        <button className="primary auth-submit" disabled={busy}>
-          {busy?'Please wait…':signup?'Create account':'Sign in'}
-        </button>
-      </form>
-
-      <div className="auth-security">
-        <b>Independent account</b>
-        <span>Family linking happens after signup and does not share your password or merge your account.</span>
-      </div>
-    </div>
-  </div>
+          <Stack direction="row" spacing={1} alignItems="flex-start" sx={{p:1.4,bgcolor:'action.hover',borderRadius:2.5}}>
+            <LockRoundedIcon color="primary" fontSize="small"/>
+            <Typography variant="caption" color="text.secondary">
+              Independent account. Family linking never shares your password or merges your login.
+            </Typography>
+          </Stack>
+        </Stack>
+      </Box>
+    </Paper>
+  </Box>
 }
