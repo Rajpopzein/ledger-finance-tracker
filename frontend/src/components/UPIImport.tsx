@@ -44,7 +44,7 @@ export default function UPIImport({accounts}:Props){
 
   if(!accounts.length){
     return <div className="card empty">
-      Add a bank account in Settings first. UPI transactions need a bank account so Ledger can reconcile them against bank-statement entries.
+      Add an account in Settings first. UPI imports can be linked to any active Ledger account.
     </div>
   }
 
@@ -60,7 +60,7 @@ export default function UPIImport({accounts}:Props){
         </label>
 
         <label>
-          Linked bank account
+          Linked account
           <select value={account||accounts[0]?.id||''} disabled={busy!=='idle'} onChange={e=>{setAccount(Number(e.target.value));setPreview(null);setFile(null)}}>
             {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
@@ -73,17 +73,17 @@ export default function UPIImport({accounts}:Props){
                 <b>Checking UPI history…</b>
                 <span>{file?.name}</span>
                 <div className="upload-progress"><i/></div>
-                <small>Ledger is checking UPI/UTR IDs and existing bank transactions.</small>
+                <small>Ledger is checking UPI/UTR IDs and existing transactions on the selected account.</small>
               </>
             : <>
                 <b>{file?'Choose another export':'Choose UPI export'}</b>
-                <span>{file?.name||'CSV, XLSX, XLS or JSON'}</span>
+                <span>{file?.name||'CSV, XLSX, XLS, JSON or PDF'}</span>
                 <small>Successful transactions only. Failed and pending payments are ignored.</small>
               </>
           }
           <input
             type="file"
-            accept=".csv,.xlsx,.xls,.json"
+            accept=".csv,.xlsx,.xls,.json,.pdf"
             disabled={busy!=='idle'}
             onChange={e=>{
               const selected=e.target.files?.[0]
@@ -144,12 +144,12 @@ export default function UPIImport({accounts}:Props){
       <div className="steps">
         <div><b>1</b><span>Read successful Google Pay / PhonePe transactions</span></div>
         <div><b>2</b><span>Match UPI transaction ID, UTR or RRN</span></div>
-        <div><b>3</b><span>Check account, amount, date and direction</span></div>
+        <div><b>3</b><span>Check the selected account, amount, date and direction</span></div>
         <div><b>4</b><span>Attach the UPI app label to existing transactions</span></div>
         <div><b>5</b><span>Create only transactions that are genuinely missing</span></div>
       </div>
       <p className="muted">
-        Amount/date-only matches are not merged automatically; ambiguous matches stay in Review.
+        Searchable PDF statements are supported. Image-only/scanned PDFs are rejected instead of being OCRed automatically. Amount/date-only matches are not merged automatically; ambiguous matches stay in Review.
       </p>
     </aside>
   </div>
