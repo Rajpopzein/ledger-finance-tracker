@@ -49,7 +49,6 @@ PREVIEWS = {}
 PUBLIC_API_PATHS = {
     "/api/health",
     "/api/auth/status",
-    "/api/auth/setup",
     "/api/auth/login",
     "/api/auth/signup",
     "/api/auth/logout",
@@ -167,25 +166,6 @@ def auth_status(request: Request, db: Session = Depends(get_db)):
         "name": None,
         "handle": None,
     }
-
-@app.post("/api/auth/setup")
-def auth_setup(body: OwnerSetup, request: Request, response: Response, db: Session = Depends(get_db)):
-    if db.get(Owner, 1) is not None:
-        raise HTTPException(409, "Owner account is already configured")
-
-    email = str(body.email).strip().lower()
-    salt, password_hash = hash_password(body.password)
-    token = create_session(1)
-    owner = Owner(id=1, email=email, password_salt=salt, password_hash=password_hash)
-    db.add(owner)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, "Owner account is already configured")
-
-    _set_session_cookie(response, request, token)
-    return {"ok": True, "email": email}
 
 @app.post("/api/auth/login")
 def auth_login(body: OwnerLogin, request: Request, response: Response, db: Session = Depends(get_db)):
