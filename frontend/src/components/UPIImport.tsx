@@ -77,13 +77,13 @@ export default function UPIImport({accounts}:Props){
               </>
             : <>
                 <b>{file?'Choose another export':'Choose UPI export'}</b>
-                <span>{file?.name||'CSV, XLSX or JSON'}</span>
+                <span>{file?.name||'CSV, XLSX, XLS or JSON'}</span>
                 <small>Successful transactions only. Failed and pending payments are ignored.</small>
               </>
           }
           <input
             type="file"
-            accept=".csv,.xlsx,.json"
+            accept=".csv,.xlsx,.xls,.json"
             disabled={busy!=='idle'}
             onChange={e=>{
               const selected=e.target.files?.[0]
