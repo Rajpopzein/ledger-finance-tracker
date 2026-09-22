@@ -262,6 +262,7 @@ def summary(from_date:date|None=None, to_date:date|None=None, db:Session=Depends
 async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Session=Depends(get_db)):
     content=await file.read(); file_hash=hashlib.sha256(content).hexdigest()
     existing_batch=db.scalar(select(ImportBatch).where(ImportBatch.account_id==account_id,ImportBatch.file_hash==file_hash))
+    already_imported=False
     if existing_batch:
         existing_source=db.scalar(
             select(TransactionSource.id)
@@ -272,8 +273,7 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
             )
             .limit(1)
         )
-        if existing_source:
-            return {"already_imported":True,"batch_id":existing_batch.id,"new":0,"existing":0,"matched":0,"review":0,"items":[]}
+        already_imported=bool(existing_source)
     try:
         rows=parse_statement(file.filename or "statement.csv",content)
     except ValueError as e:
@@ -283,6 +283,19 @@ async def preview(account_id:int=Form(...), file:UploadFile=File(...), db:Sessio
             400,
             "No transaction rows could be parsed from this statement. Check the bank CSV/XLSX headers and date/amount columns."
         )
+    if already_imported:
+        return {
+            "already_imported":True,
+            "batch_id":existing_batch.id,
+            "detected":len(rows),
+            "debits":sum(1 for row in rows if row["direction"]=="debit"),
+            "credits":sum(1 for row in rows if row["direction"]=="credit"),
+            "new":0,
+            "existing":0,
+            "matched":0,
+            "review":0,
+            "items":[],
+        }
     classified=[]; counts={"new":0,"existing":0,"matched":0,"review":0}
     for row in rows:
         match,method,score=find_match(db,account_id=account_id,txn_at=row["txn_at"],amount=row["amount"],direction=row["direction"],description=row["description"],bank_ref=row.get("bank_ref"))
