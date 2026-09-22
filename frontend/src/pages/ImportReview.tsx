@@ -89,7 +89,7 @@ export default function ImportReview(){
     }
   }
 
-  return <Stack spacing={2.2}>
+  return <Stack spacing={{xs:1.4,sm:2}}>
     <Box>
       <Typography variant="overline" color="text.secondary">SAFE IMPORT</Typography>
       <Typography variant="h1">Import transactions</Typography>
@@ -97,15 +97,15 @@ export default function ImportReview(){
     </Box>
 
     <Paper sx={{...clay,p:.6,width:'fit-content',maxWidth:'100%'}}>
-      <Tabs value={mode} onChange={(_,value)=>setMode(value)} variant="scrollable" scrollButtons="auto">
+      <Tabs value={mode} onChange={(_,value)=>setMode(value)} variant="fullWidth">
         <Tab value="bank" label="Bank statement"/>
         <Tab value="upi" label="UPI apps"/>
       </Tabs>
     </Paper>
 
-    {mode==='upi'?<UPIImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:2}}>
-      <Stack spacing={2}>
-        <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+    {mode==='upi'?<UPIImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
+      <Stack spacing={{xs:1.15,sm:2}}>
+        <Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
           {accounts.length? <Stack spacing={1.6}>
             <FormControl size="small">
               <InputLabel>Bank account</InputLabel>
@@ -124,7 +124,7 @@ export default function ImportReview(){
               variant="outlined"
               startIcon={<CloudUploadRoundedIcon/>}
               disabled={busy}
-              sx={{minHeight:110,borderStyle:'dashed',display:'flex',flexDirection:'column',gap:.5}}
+              sx={{minHeight:{xs:92,sm:110},borderStyle:'dashed',display:'flex',flexDirection:'column',gap:.5}}
             >
               <Typography fontWeight={750}>{stage==='uploading'?'Uploading & checking…':fileName?'Choose another statement':'Choose statement'}</Typography>
               <Typography variant="caption" color="text.secondary">{fileName||'CSV, XLSX or XLS'}</Typography>
@@ -139,14 +139,14 @@ export default function ImportReview(){
                 }}
               />
             </Button>
-          </Stack>:<Alert severity="info" action={<Button component={RouterLink} to="/settings">Settings</Button>}>
+          </Stack>:<Alert severity="info" action={<Button component={RouterLink} to="/profile?tab=settings">Settings</Button>}>
             Add a bank account before importing a bank statement.
           </Alert>}
         </Paper>
 
         {error&&<Alert severity="error">{error}</Alert>}
 
-        {preview&&<Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+        {preview&&<Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
           <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={1} sx={{mb:2}}>
             <Typography variant="h2">Import preview</Typography>
             {fileName&&<Chip label={fileName} variant="outlined" sx={{maxWidth:{xs:'100%',sm:280}}}/>}
@@ -161,7 +161,7 @@ export default function ImportReview(){
                       ['FOUND',preview.detected],
                       ['DEBITS',preview.debits??0],
                       ['CREDITS',preview.credits??0]
-                    ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:2.5}}>
+                    ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:1.5}}>
                       <Typography variant="caption" color="text.secondary">{label}</Typography>
                       <Typography variant="h2">{value}</Typography>
                     </Paper>)}
@@ -178,7 +178,7 @@ export default function ImportReview(){
                 ['NEW',preview.new],
                 ['MATCHED',preview.matched],
                 ['REVIEW',preview.review]
-              ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:2.5}}>
+              ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:1.5}}>
                 <Typography variant="caption" color="text.secondary">{label}</Typography>
                 <Typography variant="h2">{value}</Typography>
               </Paper>)}
@@ -197,7 +197,7 @@ export default function ImportReview(){
         </Paper>}
       </Stack>
 
-      <Paper sx={{...clay,p:2.2,height:'fit-content'}}>
+      <Paper sx={{...clay,p:{xs:1.4,sm:2},height:'fit-content'}}>
         <Typography variant="h2">Duplicate protection</Typography>
         <Stack spacing={1.4} sx={{mt:1.6}}>
           {[
