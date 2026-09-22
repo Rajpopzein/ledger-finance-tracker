@@ -33,12 +33,16 @@ def _classify(db: Session, account_id: int, row):
     upi_ref = row.get("upi_ref")
 
     if upi_ref:
+        ref_text = str(upi_ref).strip()
+        ref_prefix = ref_text[:9] if ref_text.isdigit() and len(ref_text) >= 9 else ref_text
         exact = db.scalar(
             select(Transaction).where(
                 Transaction.account_id == account_id,
                 or_(
-                    Transaction.upi_ref == upi_ref,
-                    Transaction.bank_ref == upi_ref,
+                    Transaction.upi_ref == ref_text,
+                    Transaction.bank_ref == ref_text,
+                    Transaction.upi_ref.contains(ref_prefix),
+                    Transaction.bank_ref.contains(ref_prefix),
                 ),
             )
         )
