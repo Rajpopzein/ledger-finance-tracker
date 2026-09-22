@@ -47,6 +47,13 @@ Never output or reconstruct account numbers, IFSC codes, UPI IDs, card numbers, 
 passwords, tokens or unrelated personal identifiers. Return JSON only.
 """.strip()
 
+BLOCKED_TASK_TERMS = {
+    "write code","coding","programming","python","javascript","typescript","react","sql query",
+    "shell command","terminal command","system prompt","developer message","ignore previous",
+    "ignore your instructions","jailbreak","weather","medical advice","legal advice","politics",
+    "capital of","general knowledge","translate this","write an essay",
+}
+
 FINANCE_TERMS = {
     "finance","financial","money","spend","spending","spent","expense","expenses","income",
     "salary","budget","saving","savings","debt","loan","emi","mortgage","interest","bank",
@@ -74,6 +81,10 @@ def redact_sensitive_text(value: str | None) -> str:
 
 def ensure_finance_scope(prompt: str):
     normalized = prompt.lower()
+    if any(term in normalized for term in BLOCKED_TASK_TERMS):
+        raise ValueError(
+            "Ledger AI is restricted to personal-finance analysis and cannot perform coding, general-knowledge or unrelated tasks."
+        )
     if not any(term in normalized for term in FINANCE_TERMS):
         raise ValueError(
             "Ledger AI only answers questions about your personal finances, transactions, budgets, income, spending or debt."
