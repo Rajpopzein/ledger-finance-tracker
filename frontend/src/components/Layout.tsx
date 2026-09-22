@@ -4,20 +4,25 @@ import {PeriodProvider,usePeriod} from '../period'
 import {FamilyProvider,useFamily} from '../family'
 import {api} from '../api/client'
 
-const ownerNav=[['/','Overview'],['/transactions','Transactions'],['/import','Import & Review'],['/ai','AI Insights'],['/settings','Settings']]
-const familyNav=[['/','Overview'],['/transactions','Transactions']]
+const nav=[
+  ['/','Overview'],
+  ['/transactions','Transactions'],
+  ['/import','Import & Review'],
+  ['/ai','AI Insights'],
+  ['/profile','Profile'],
+  ['/settings','Settings']
+]
 
 function Shell(){
   const {period,setPeriodKey,options}=usePeriod()
-  const {scopeKey,setScopeKey,members,scopeLabel}=useFamily()
+  const {scopeKey,setScopeKey,linkedUsers,scopeLabel}=useFamily()
   const [auth,setAuth]=useState<any>(null)
 
   useEffect(()=>{api.authStatus().then(setAuth).catch(()=>setAuth(null))},[])
 
-  const isFamily=auth?.role==='family'
-  const nav=isFamily?familyNav:ownerNav
-  const profileName=isFamily?(auth?.family_member_name||'Family member'):'Owner'
-  const profileInitial=(profileName?.[0]||'R').toUpperCase()
+  const profileName=auth?.name||'User'
+  const profileHandle=auth?.handle||''
+  const profileInitial=(profileName?.[0]||'U').toUpperCase()
 
   async function signOut(){
     try{await api.logout()}finally{window.location.replace('/')}
@@ -29,9 +34,13 @@ function Shell(){
         <div className="brand"><div className="logo">₹</div><b>LEDGER</b></div>
         <nav>{nav.map(([to,label])=><NavLink key={to} to={to} end={to==='/'} className={({isActive})=>`nav ${isActive?'active':''}`}>{label}</NavLink>)}</nav>
       </div>
+
       <div className="profile">
         <div className="avatar">{profileInitial}</div>
-        <div className="profile-copy"><strong>{profileName}</strong><small>{isFamily?'Family ledger':'Private ledger'}</small></div>
+        <div className="profile-copy">
+          <strong>{profileName}</strong>
+          <small>{profileHandle||'Private ledger'}</small>
+        </div>
         <button className="ghost signout" onClick={signOut}>Sign out</button>
       </div>
     </aside>
@@ -52,7 +61,7 @@ function Shell(){
             {options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
 
-          {!isFamily&&<select
+          <select
             className="family-scope-select"
             value={scopeKey}
             onChange={e=>setScopeKey(e.target.value)}
@@ -61,18 +70,17 @@ function Shell(){
             <option value="self">Self</option>
             <option value="family">Family</option>
             <option value="all">Self + Family</option>
-            {members.map(member=><option key={member.id} value={`member:${member.id}`}>{member.name}</option>)}
-          </select>}
-
-          {isFamily&&<span className="family-login-label">{profileName}</span>}
+            {linkedUsers.map(user=><option key={user.id} value={`user:${user.id}`}>{user.name} • {user.handle}</option>)}
+          </select>
         </div>
 
-        <span className="date">{period.rangeLabel} • {isFamily?profileName:scopeLabel}</span>
+        <span className="date">{period.rangeLabel} • {scopeLabel}</span>
       </header>
+
       <main><Outlet/></main>
     </div>
 
-    <div className="mobile-nav">{nav.map(([to,label])=><NavLink key={to} to={to} end={to==='/' }>{label.split(' ')[0]}</NavLink>)}</div>
+    <div className="mobile-nav">{nav.slice(0,5).map(([to,label])=><NavLink key={to} to={to} end={to==='/' }>{label.split(' ')[0]}</NavLink>)}</div>
   </div>
 }
 
