@@ -1,15 +1,16 @@
 import hashlib
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import ImportBatch, Transaction, TransactionSource
+from .models import Account, ImportBatch, Transaction, TransactionSource
 from .services.dedupe import fingerprint, find_match
 from .services.upi_importer import app_label, parse_upi_statement
+from .users import current_user_id
 
 router = APIRouter()
 
@@ -99,11 +100,16 @@ def _parse(app: str, file: UploadFile, content: bytes):
 
 @router.post("/api/imports/upi/preview")
 async def preview_upi(
+    request: Request,
     account_id: int = Form(...),
     app: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    user_id = current_user_id(request)
+    account = db.get(Account, account_id)
+    if not account or account.user_id != user_id:
+        raise HTTPException(404, "Account not found")
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
     label, rows = _parse(app, file, content)
@@ -150,11 +156,16 @@ async def preview_upi(
 
 @router.post("/api/imports/upi/commit")
 async def commit_upi(
+    request: Request,
     account_id: int = Form(...),
     app: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    user_id = current_user_id(request)
+    account = db.get(Account, account_id)
+    if not account or account.user_id != user_id:
+        raise HTTPException(404, "Account not found")
     content = await file.read()
     file_hash = hashlib.sha256(content).hexdigest()
     label, rows = _parse(app, file, content)
@@ -234,6 +245,7 @@ async def commit_upi(
             row["description"],
         )
         tx = Transaction(
+            user_id=user_id,
             account_id=account_id,
             txn_at=row["txn_at"],
             amount=row["amount"],
