@@ -38,6 +38,7 @@ export const api={
  authStatus:()=>req<any>('/auth/status'),
  setupOwner:(email:string,password:string)=>req<any>('/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
  login:(email:string,password:string)=>req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
+ familySignup:(memberCode:string,email:string,password:string)=>req<any>('/auth/family-signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({member_code:memberCode,email,password})}),
  logout:()=>req<any>('/auth/logout',{method:'POST'}),
  summary:(from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
    const p=new URLSearchParams()
