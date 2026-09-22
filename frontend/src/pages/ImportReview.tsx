@@ -42,11 +42,11 @@ export default function ImportReview(){
   }
 
   async function commit(){
-    if(!preview?.preview_token)return
+    if(!account||!selectedFile)return
     setStage('committing')
     setError('')
     try{
-      const r=await api.commit(preview.preview_token)
+      const r=await api.bankCommit(account,selectedFile)
       setPreview({...preview,committed:r})
     }catch(e:any){
       setError(e.message||'Could not import this statement.')
@@ -177,7 +177,11 @@ export default function ImportReview(){
                 </div>
 
                 {preview.committed
-                  ? <div className="success">Imported {preview.committed.inserted} new transactions and verified {preview.committed.matched} existing records.</div>
+                  ? <div className="success">
+                      {preview.committed.already_imported
+                        ? 'This exact statement is already in your ledger. Nothing new was added.'
+                        : `Imported ${preview.committed.inserted} new transactions and verified ${preview.committed.matched} existing records.`}
+                    </div>
                   : <>
                       <button className="primary" onClick={commit} disabled={busy}>
                         {stage==='committing'?'Adding transactions…':`Add ${preview.new} new transactions`}
