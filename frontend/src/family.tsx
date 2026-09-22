@@ -2,7 +2,7 @@ import {createContext,useContext,useEffect,useMemo,useState} from 'react'
 import type {ReactNode} from 'react'
 import {api} from './api/client'
 
-export type LinkedUser={id:number;email:string;handle:string;handle_raw:string;name:string;phone?:string|null}
+export type LinkedUser={id:number;email:string;handle:string;handle_raw:string;name:string;phone?:string|null;link_id:number;label?:string|null}
 export type FamilyScopeKey='self'|'family'|'all'|string
 
 type FamilyContextValue={
@@ -28,7 +28,7 @@ export function FamilyProvider({children}:{children:ReactNode}){
   async function refreshFamily(){
     try{
       const network=await api.familyNetwork()
-      const users=(network.linked||[]).map((x:any)=>x.user)
+      const users=(network.linked||[]).map((x:any)=>({...x.user,link_id:x.link_id,label:x.label||null}))
       setLinkedUsers(users)
       setIncoming(network.incoming||[])
       setOutgoing(network.outgoing||[])
