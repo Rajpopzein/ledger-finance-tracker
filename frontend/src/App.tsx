@@ -1,12 +1,11 @@
 import {useEffect,useState} from 'react'
-import {Routes,Route} from 'react-router-dom'
+import {Navigate,Routes,Route} from 'react-router-dom'
 import {Box,CircularProgress,Typography} from '@mui/material'
 import Layout from './components/Layout'
 import Overview from './pages/Overview'
 import Transactions from './pages/Transactions'
 import ImportReview from './pages/ImportReview'
 import AIInsights from './pages/AIInsights'
-import Settings from './pages/Settings'
 import Profile from './pages/Profile'
 import Auth from './pages/Auth'
 import {api} from './api/client'
@@ -32,7 +31,7 @@ export default function App(){
       <Route path="/import" element={<ImportReview/>}/>
       <Route path="/ai" element={<AIInsights/>}/>
       <Route path="/profile" element={<Profile/>}/>
-      <Route path="/settings" element={<Settings/>}/>
+      <Route path="/settings" element={<Navigate to="/profile?tab=settings" replace/>}/>
     </Route>
   </Routes>
 }
