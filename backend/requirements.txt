@@ -6,6 +6,7 @@ pydantic-settings
 pydantic[email]
 python-multipart
 openpyxl
+xlrd
 httpx
 cryptography
 pytest
