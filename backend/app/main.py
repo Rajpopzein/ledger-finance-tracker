@@ -207,8 +207,11 @@ def create_account(body:AccountCreate, request:Request, db:Session=Depends(get_d
 DEFAULT_CATEGORIES=["Food & Dining","Fuel","Groceries","EMI & Loans","Shopping","Bills & Subscriptions","Travel","Health","Payroll","Investments","Other"]
 
 @app.get("/api/categories")
-def categories(db:Session=Depends(get_db)):
-    existing={c.name:c.id for c in db.scalars(select(Category).order_by(Category.name)).all()}
+def categories(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    existing={c.name:c.id for c in db.scalars(
+        select(Category).where(Category.user_id==user_id).order_by(Category.name)
+    ).all()}
     return [{"id":existing.get(name),"name":name} for name in DEFAULT_CATEGORIES] + [{"id":cid,"name":name} for name,cid in existing.items() if name not in DEFAULT_CATEGORIES]
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
@@ -310,9 +313,9 @@ def serialize_tx(t):
 @app.post("/api/transactions/cash")
 def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(get_db)):
     user_id=current_user_id(request)
-    category=db.scalar(select(Category).where(func.lower(Category.name)==body.category.lower()))
+    category=db.scalar(select(Category).where(Category.user_id==user_id,func.lower(Category.name)==body.category.lower()))
     if not category:
-        category=Category(name=body.category); db.add(category); db.flush()
+        category=Category(user_id=user_id,name=body.category); db.add(category); db.flush()
     cash=db.scalar(select(Account).where(Account.user_id==user_id,Account.type=="cash"))
     if not cash:
         cash=Account(user_id=user_id,name="Cash",institution="Cash",type="cash",is_active=True)
