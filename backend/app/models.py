@@ -46,6 +46,7 @@ class Account(Base):
     account_mask: Mapped[str | None] = mapped_column(String(8), nullable=True)
     type: Mapped[str] = mapped_column(String(30), default="bank")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    user: Mapped[User | None] = relationship()
 
 class Category(Base):
     __tablename__ = "categories"
@@ -85,6 +86,7 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     account: Mapped[Account | None] = relationship()
+    user: Mapped[User | None] = relationship()
     category: Mapped[Category | None] = relationship()
     family_member: Mapped[FamilyMember | None] = relationship()
     sources: Mapped[list["TransactionSource"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
