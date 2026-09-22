@@ -4,6 +4,7 @@ import type {Tx} from '../types'
 import {usePeriod} from '../period'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
+const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
 
 export default function Transactions(){
   const {period,setPeriodKey}=usePeriod()
@@ -59,7 +60,7 @@ export default function Transactions(){
         {items.length
           ? items.map(t=>
               <button key={t.id} onClick={()=>setSelected(t)} className={`trow ${selected?.id===t.id?'selected':''}`}>
-                <span><b>{t.merchant||'Transaction'}</b><small>{t.txn_type.replace('_',' ')}</small></span>
+                <span><b>{t.merchant||'Transaction'}</b><small>{t.txn_type.replace('_',' ')}</small>{upiLabel(t)&&<em className="source-pill">{upiLabel(t)}</em>}</span>
                 <span>{t.category}</span>
                 <span>{t.account}<small>{t.payment_method||''}</small></span>
                 <span>{new Date(t.txn_at).toLocaleDateString('en-IN')}</span>
