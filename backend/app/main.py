@@ -193,8 +193,34 @@ def create_cash(body:CashTransactionCreate, db:Session=Depends(get_db)):
     if not cash:
         cash=Account(name="Cash",institution="Cash",type="cash",is_active=True)
         db.add(cash); db.flush()
+
     fp=fingerprint(cash.id, body.txn_at, body.amount, "debit", body.note or body.category)
-    tx=Transaction(account_id=cash.id,category_id=category.id,txn_at=body.txn_at,amount=body.amount,direction="debit",txn_type="cash_expense",payment_method="cash",merchant=body.note or body.category,description_raw=body.note,fingerprint=fp,verification_status="manual")
+    existing=db.scalar(
+        select(Transaction)
+        .join(TransactionSource, TransactionSource.transaction_id==Transaction.id)
+        .where(
+            Transaction.account_id==cash.id,
+            Transaction.fingerprint==fp,
+            TransactionSource.source_type=="manual",
+        )
+        .limit(1)
+    )
+    if existing:
+        return serialize_tx(existing)
+
+    tx=Transaction(
+        account_id=cash.id,
+        category_id=category.id,
+        txn_at=body.txn_at,
+        amount=body.amount,
+        direction="debit",
+        txn_type="cash_expense",
+        payment_method="cash",
+        merchant=body.note or body.category,
+        description_raw=body.note,
+        fingerprint=fp,
+        verification_status="manual",
+    )
     tx.sources.append(TransactionSource(source_type="manual",source_name="Manual Cash Entry"))
     db.add(tx); db.commit(); db.refresh(tx)
     return serialize_tx(tx)
