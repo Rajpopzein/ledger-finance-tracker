@@ -54,9 +54,9 @@ export default function UPIImport(){
 
   const clay=claySx(resolvedMode)
 
-  return <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:2}}>
-    <Stack spacing={2}>
-      <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+  return <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
+    <Stack spacing={{xs:1.15,sm:2}}>
+      <Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
         <Stack spacing={1.6}>
           <FormControl size="small">
             <InputLabel>UPI app</InputLabel>
@@ -81,7 +81,7 @@ export default function UPIImport(){
             variant="outlined"
             startIcon={<CloudUploadRoundedIcon/>}
             disabled={busy!=='idle'}
-            sx={{minHeight:110,borderStyle:'dashed',display:'flex',flexDirection:'column',gap:.5}}
+            sx={{minHeight:{xs:92,sm:110},borderStyle:'dashed',display:'flex',flexDirection:'column',gap:.5}}
           >
             <Typography fontWeight={750}>{busy==='preview'?'Checking UPI history…':file?'Choose another export':'Choose UPI export'}</Typography>
             <Typography variant="caption" color="text.secondary">{file?.name||'CSV, XLSX, XLS, JSON or PDF'}</Typography>
@@ -106,7 +106,7 @@ export default function UPIImport(){
 
       {error&&<Alert severity="error">{error}</Alert>}
 
-      {preview&&<Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+      {preview&&<Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
         <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={1} sx={{mb:2}}>
           <Box><Typography variant="overline" color="text.secondary">UPI IMPORT</Typography><Typography variant="h2">{preview.app}</Typography></Box>
           {file&&<Chip label={file.name} variant="outlined" sx={{maxWidth:{xs:'100%',sm:260}}}/>}
@@ -118,7 +118,7 @@ export default function UPIImport(){
             ['NEW',preview.new||0],
             ['EXISTING',preview.existing||0],
             ['REVIEW',preview.review||0]
-          ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:2.5}}>
+          ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:1.5}}>
             <Typography variant="caption" color="text.secondary">{label}</Typography>
             <Typography variant="h2">{value}</Typography>
           </Paper>)}
@@ -148,7 +148,7 @@ export default function UPIImport(){
       </Paper>}
     </Stack>
 
-    <Paper sx={{...clay,p:2.2,height:'fit-content'}}>
+    <Paper sx={{...clay,p:{xs:1.4,sm:2},height:'fit-content'}}>
       <Typography variant="h2">UPI reconciliation</Typography>
       <Stack spacing={1.4} sx={{mt:1.6}}>
         {[
