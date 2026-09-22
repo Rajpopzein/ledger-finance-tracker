@@ -1,12 +1,13 @@
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..models import AISetting
 from .secrets import decrypt
 
 SYSTEM = "You are a read-only personal finance analyst. Explain only the supplied calculated data. Never invent transactions, balances, or recommendations not supported by the data. Never claim to modify records."
 
-async def ask_model(db: Session, prompt: str, context: dict) -> str:
-    s = db.get(AISetting, 1)
+async def ask_model(db: Session, user_id: int, prompt: str, context: dict) -> str:
+    s = db.scalar(select(AISetting).where(AISetting.user_id == user_id))
     if not s or not s.provider or not s.model:
         raise ValueError("AI provider is not configured")
     text = f"{SYSTEM}\n\nUser question: {prompt}\n\nCalculated finance data:\n{context}"
