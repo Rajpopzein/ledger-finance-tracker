@@ -17,6 +17,7 @@ import {
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
+import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded'
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded'
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
@@ -31,6 +32,7 @@ const drawerWidth=256
 const nav=[
   {to:'/',label:'Overview',icon:<DashboardRoundedIcon/>},
   {to:'/transactions',label:'Transactions',icon:<ReceiptLongRoundedIcon/>},
+  {to:'/debts',label:'Debts',icon:<AccountBalanceRoundedIcon/>},
   {to:'/import',label:'Import',icon:<UploadFileRoundedIcon/>},
   {to:'/ai',label:'AI Insights',icon:<AutoAwesomeRoundedIcon/>},
   {to:'/profile',label:'Profile & Settings',icon:<PersonRoundedIcon/>},
