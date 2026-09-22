@@ -64,7 +64,12 @@ export const api={
    f.append('file',file)
    return req<any>('/imports/reprocess',{method:'POST',body:f})
  },
- commit:(token:string)=>req<any>(`/imports/commit/${token}`,{method:'POST'}),
+ bankCommit:(accountId:number,file:File)=>{
+   const f=new FormData()
+   f.append('account_id',String(accountId))
+   f.append('file',file)
+   return req<any>('/imports/bank/commit',{method:'POST',body:f})
+ },
  upiPreview:(accountId:number,app:string,file:File)=>{
    const f=new FormData()
    f.append('account_id',String(accountId))
