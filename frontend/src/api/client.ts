@@ -1,7 +1,12 @@
 const API=import.meta.env.VITE_API_URL || '/api'
 
+const SESSION_KEY='ledger_session_token'
+
 async function req<T>(path:string,init?:RequestInit):Promise<T>{
-  const r=await fetch(API+path,{...init,credentials:'include'})
+  const token=localStorage.getItem(SESSION_KEY)
+  const headers=new Headers(init?.headers||{})
+  if(token)headers.set('Authorization',`Bearer ${token}`)
+  const r=await fetch(API+path,{...init,headers,credentials:'include'})
   const raw=await r.text()
 
   let body:any=null
@@ -37,8 +42,15 @@ const dateQs=(from?:string,to?:string)=>{
 export const api={
  authStatus:()=>req<any>('/auth/status'),
  signup:(name:string,handle:string,email:string,password:string)=>req<any>('/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,handle,email,password})}),
- login:(email:string,password:string)=>req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})}),
- logout:()=>req<any>('/auth/logout',{method:'POST'}),
+ login:async(email:string,password:string)=>{
+   const result=await req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})})
+   if(result?.session_token)localStorage.setItem(SESSION_KEY,result.session_token)
+   return result
+ },
+ logout:async()=>{
+   try{return await req<any>('/auth/logout',{method:'POST'})}
+   finally{localStorage.removeItem(SESSION_KEY)}
+ },
  summary:(from?:string,to?:string,familyScope='self',familyMemberId?:number)=>{
    const p=new URLSearchParams()
    if(from)p.set('from_date',from)
