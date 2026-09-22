@@ -20,31 +20,15 @@ class FamilyLinkCreate(BaseModel):
 class FamilyLinkAction(BaseModel):
     action: str = Field(pattern="^(accept|reject)$")
 
-class OwnerSetup(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
-
 class OwnerLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
-
-class FamilySignup(BaseModel):
-    member_code: str = Field(min_length=1, max_length=64)
-    email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
 
 class AccountCreate(BaseModel):
     institution: str = Field(min_length=1, max_length=100)
     account_mask: str | None = Field(default=None, max_length=8)
     name: str | None = Field(default=None, max_length=100)
     type: str = "bank"
-
-class FamilyMemberCreate(BaseModel):
-    member_code: str = Field(min_length=1, max_length=64)
-    name: str = Field(min_length=1, max_length=100)
-
-class FamilyMemberTag(BaseModel):
-    family_member_id: int | None = None
 
 class CashTransactionCreate(BaseModel):
     amount: Decimal = Field(gt=0)
