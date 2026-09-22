@@ -1,4 +1,18 @@
 import {useEffect,useState} from 'react'
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+} from '@mui/material'
 import {api} from '../api/client'
 
 const defaults=['Food & Dining','Fuel','Groceries','EMI & Loans','Shopping','Bills & Subscriptions','Travel','Health','Other']
@@ -31,8 +45,6 @@ export default function QuickCash({
     }
   },[open])
 
-  if(!open)return null
-
   async function save(){
     if(saving||!form.amount)return
     setSaving(true)
@@ -53,66 +65,62 @@ export default function QuickCash({
     }
   }
 
-  return <div className="modal-back">
-    <div className="modal">
-      <div className="row between modal-head">
-        <h2>Add cash expense</h2>
-        <button className="ghost modal-close" onClick={onClose} disabled={saving}>✕</button>
-      </div>
-
-      <label>
-        Amount
-        <input
+  return <Dialog
+    open={open}
+    onClose={saving?undefined:onClose}
+    fullWidth
+    maxWidth="xs"
+    PaperProps={{sx:{borderRadius:4}}}
+  >
+    <DialogTitle>Add cash expense</DialogTitle>
+    <DialogContent>
+      <Stack spacing={1.6} sx={{pt:.5}}>
+        <TextField
+          label="Amount"
           type="number"
-          inputMode="decimal"
-          min="0"
-          step="0.01"
+          inputProps={{inputMode:'decimal',min:0,step:.01}}
           value={form.amount}
           disabled={saving}
           onChange={e=>setForm({...form,amount:e.target.value})}
         />
-      </label>
 
-      <label>
-        Category
-        <select
-          value={form.category}
-          disabled={saving}
-          onChange={e=>setForm({...form,category:e.target.value})}
-        >
-          {cats.map((c:any)=><option key={c.name} value={c.name}>{c.name}</option>)}
-        </select>
-      </label>
+        <FormControl size="small">
+          <InputLabel>Category</InputLabel>
+          <Select
+            label="Category"
+            value={form.category}
+            disabled={saving}
+            onChange={e=>setForm({...form,category:String(e.target.value)})}
+          >
+            {cats.map((c:any)=><MenuItem key={c.name} value={c.name}>{c.name}</MenuItem>)}
+          </Select>
+        </FormControl>
 
-      <label>
-        Date
-        <input
+        <TextField
+          label="Date"
           type="datetime-local"
           value={form.txn_at}
           disabled={saving}
+          InputLabelProps={{shrink:true}}
           onChange={e=>setForm({...form,txn_at:e.target.value})}
         />
-      </label>
 
-      <label>
-        Description / note
-        <input
+        <TextField
+          label="Description / note"
           value={form.note}
           disabled={saving}
           onChange={e=>setForm({...form,note:e.target.value})}
         />
-      </label>
 
-      {error&&<div className="attention">{error}</div>}
-
-      <button className="primary modal-submit" disabled={!form.amount||saving} onClick={save}>
-        {saving?'Saving expense…':'Save expense'}
-      </button>
-
-      {saving&&<div className="commit-status">
-        <div className="upload-spinner small" aria-hidden="true"/>
-        Saving once — duplicate taps are blocked.
-      </div>}
-    </div>
-  </div>
+        {error&&<Alert severity="error">{error}</Alert>}
+        {saving&&<Alert severity="info">Saving once — duplicate taps are blocked.</Alert>}
+      </Stack>
+    </DialogContent>
+    <DialogActions sx={{p:2}}>
+      <Button onClick={onClose} disabled={saving}>Cancel</Button>
+      <Button variant="contained" onClick={save} disabled={!form.amount||saving}>
+        {saving?'Saving…':'Save expense'}
+      </Button>
+    </DialogActions>
+  </Dialog>
 }
