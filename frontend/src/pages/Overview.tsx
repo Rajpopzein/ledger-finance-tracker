@@ -247,7 +247,7 @@ export default function Overview(){
     flow:<CashFlowCard s={s} mode={resolvedMode}/>,
     category:<CategoryCard s={s} mode={resolvedMode}/>,
     family:<FamilyCard s={s} periodLabel={period.label} mode={resolvedMode}/>,
-    recent:<RecentCard tx={tx} mode={resolvedMode} onAll={()=>window.location.assign('/transactions')}/>,
+    recent:<RecentCard tx={tx} mode={resolvedMode} onAll={()=>window.location.assign('/#/transactions')}/>,
   }
 
   const balanced=<>
