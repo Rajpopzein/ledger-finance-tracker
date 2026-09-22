@@ -10,6 +10,11 @@ class OwnerLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
 
+class FamilySignup(BaseModel):
+    member_code: str = Field(min_length=1, max_length=64)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+
 class AccountCreate(BaseModel):
     institution: str = Field(min_length=1, max_length=100)
     account_mask: str | None = Field(default=None, max_length=8)
