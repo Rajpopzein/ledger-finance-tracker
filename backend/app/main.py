@@ -191,21 +191,17 @@ def auth_setup(body: OwnerSetup, request: Request, response: Response, db: Sessi
 @app.post("/api/auth/login")
 def auth_login(body: OwnerLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     email = str(body.email).strip().lower()
+    user = db.scalar(select(User).where(func.lower(User.email) == email))
+    if user is not None and verify_password(body.password, user.password_salt, user.password_hash):
+        _set_session_cookie(response, request, create_session(user.id, "user"))
+        return {"ok": True, "email": user.email, "role": "user"}
+
     owner = db.scalar(select(Owner).where(func.lower(Owner.email) == email))
     if owner is not None and verify_password(body.password, owner.password_salt, owner.password_hash):
-        _set_session_cookie(response, request, create_session(owner.id, "owner"))
-        return {"ok": True, "email": owner.email, "role": "owner"}
-
-    member = db.scalar(select(FamilyMember).where(func.lower(FamilyMember.email) == email))
-    if (
-        member is not None
-        and member.is_active
-        and member.password_salt
-        and member.password_hash
-        and verify_password(body.password, member.password_salt, member.password_hash)
-    ):
-        _set_session_cookie(response, request, create_session(member.id, "family"))
-        return {"ok": True, "email": member.email, "role": "family"}
+        migrated = db.scalar(select(User).where(func.lower(User.email) == email))
+        if migrated:
+            _set_session_cookie(response, request, create_session(migrated.id, "user"))
+            return {"ok": True, "email": migrated.email, "role": "user"}
 
     raise HTTPException(401, "Invalid email or password")
 
