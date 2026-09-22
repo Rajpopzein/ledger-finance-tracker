@@ -1,8 +1,22 @@
 import {useEffect,useState} from 'react'
-import {api} from '../api/client'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  Paper,
+  Skeleton,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import type {Tx} from '../types'
+import {api} from '../api/client'
 import {usePeriod} from '../period'
 import {useFamily} from '../family'
+import {claySx,useUI} from '../ui'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
@@ -10,6 +24,7 @@ const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
 export default function Transactions(){
   const {period,setPeriodKey}=usePeriod()
   const {familyScope,familyUserId,scopeLabel}=useFamily()
+  const {resolvedMode}=useUI()
   const [q,setQ]=useState('')
   const [items,setItems]=useState<Tx[]>([])
   const [selected,setSelected]=useState<Tx|null>(null)
@@ -35,86 +50,126 @@ export default function Transactions(){
     return()=>clearTimeout(t)
   },[q,period.from,period.to,familyScope,familyUserId])
 
-  return <>
-    <div className="page-head">
-      <div><small>{period.label.toUpperCase()} • {scopeLabel.toUpperCase()}</small><h1>Transactions</h1></div>
-    </div>
+  const clay=claySx(resolvedMode)
 
-    <div className="search">
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search transactions, merchants or references…"/>
-    </div>
+  return <Stack spacing={2.2}>
+    <Box>
+      <Typography variant="overline" color="text.secondary">{period.label.toUpperCase()} · {scopeLabel.toUpperCase()}</Typography>
+      <Typography variant="h1">Transactions</Typography>
+    </Box>
 
-    {loading&&<div className="dashboard-state card">
-      <div className="upload-spinner small" aria-hidden="true"/>
-      <div><b>Loading transactions…</b><span>Checking {period.label} • {scopeLabel}.</span></div>
-    </div>}
+    <TextField
+      fullWidth
+      value={q}
+      onChange={e=>setQ(e.target.value)}
+      placeholder="Search transactions, merchants or references…"
+      InputProps={{startAdornment:<SearchRoundedIcon sx={{mr:1,color:'text.secondary'}}/>}}
+    />
 
-    {error&&<div className="dashboard-state card error-state">
-      <div><b>Could not load transactions</b><span>{error}</span></div>
-    </div>}
+    {loading&&<Stack spacing={1}>
+      {[1,2,3,4].map(i=><Skeleton key={i} variant="rounded" height={76} sx={{borderRadius:3}}/>)}
+    </Stack>}
 
-    {!loading&&!error&&<div className="ledger-wrap">
-      <section className="ledger">
-        <div className="thead">
-          <span>Merchant</span><span>Category</span><span>Account</span><span>Date</span><span className="right">Amount</span><span>Status</span>
-        </div>
+    {error&&<Alert severity="error">{error}</Alert>}
 
-        {items.length
-          ? items.map(t=>
-              <button key={t.id} onClick={()=>setSelected(t)} className={`trow ${selected?.id===t.id?'selected':''}`}>
-                <span>
-                  <b>{t.merchant||'Transaction'}</b>
-                  <small>{t.txn_type.replace('_',' ')}</small>
-                  <div className="tx-pills">
-                    {t.user&&<em className="family-pill">{t.user.name} • {t.user.handle}</em>}
-                    {upiLabel(t)&&<em className="source-pill">{upiLabel(t)}</em>}
-                  </div>
-                </span>
-                <span>{t.category}</span>
-                <span>{t.account}<small>{t.payment_method||''}</small></span>
-                <span>{new Date(t.txn_at).toLocaleDateString('en-IN')}</span>
-                <span className={`right ${t.direction==='credit'?'pos':''}`}>{t.direction==='credit'?'+':'-'}{money(t.amount)}</span>
-                <span className="badge">{t.verification_status.replace('_',' ')}</span>
-              </button>
-            )
-          : <div className="empty ledger-empty">
-              <b>No transactions for {scopeLabel} in {period.label}.</b>
-              {period.key!=='all'&&<div style={{marginTop:10}}><button className="secondary" onClick={()=>setPeriodKey('all')}>Show all dates</button></div>}
-            </div>}
-      </section>
+    {!loading&&!error&&<Box sx={{
+      display:'grid',
+      gridTemplateColumns:{xs:'1fr',lg:'minmax(0,1fr) 360px'},
+      gap:2,
+      alignItems:'start',
+    }}>
+      <Paper sx={{...clay,p:{xs:1,sm:1.5},minWidth:0}}>
+        <Stack divider={<Divider/>}>
+          {items.map(t=><Box
+            key={t.id}
+            component="button"
+            onClick={()=>setSelected(t)}
+            sx={{
+              border:0,
+              width:'100%',
+              bgcolor:selected?.id===t.id?'action.selected':'transparent',
+              color:'text.primary',
+              textAlign:'left',
+              cursor:'pointer',
+              borderRadius:2.5,
+              p:{xs:1.2,sm:1.4},
+              display:'grid',
+              gridTemplateColumns:{xs:'1fr auto',sm:'minmax(0,2fr) minmax(110px,1fr) minmax(110px,1fr) auto'},
+              gap:{xs:.8,sm:1.5},
+              alignItems:'center',
+              '&:hover':{bgcolor:'action.hover'},
+            }}
+          >
+            <Box sx={{minWidth:0}}>
+              <Typography fontWeight={750} noWrap>{t.merchant||'Transaction'}</Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>{t.category} · {t.txn_type.replace('_',' ')}</Typography>
+              <Stack direction="row" gap=.6 sx={{mt:.6,flexWrap:'wrap'}}>
+                {t.user&&<Chip size="small" variant="outlined" label={`${t.user.name} · ${t.user.handle}`}/>}
+                {upiLabel(t)&&<Chip size="small" color="primary" variant="outlined" label={upiLabel(t)}/>}
+              </Stack>
+            </Box>
 
-      {selected&&<aside className="detail">
-        <small>TRANSACTION DETAILS</small>
-        <div className="row between">
-          <div><h2>{selected.merchant||'Transaction'}</h2><span>{new Date(selected.txn_at).toLocaleString('en-IN')}</span></div>
-          <h2>{money(selected.amount)}</h2>
-        </div>
+            <Box sx={{display:{xs:'none',sm:'block'},minWidth:0}}>
+              <Typography variant="body2" noWrap>{t.account}</Typography>
+              <Typography variant="caption" color="text.secondary">{t.payment_method||'—'}</Typography>
+            </Box>
 
-        <div className="detail-grid">
-          <div><small>Category</small><b>{selected.category}</b></div>
-          <div><small>Account</small><b>{selected.account}</b></div>
-        </div>
+            <Box sx={{display:{xs:'none',sm:'block'}}}>
+              <Typography variant="body2">{new Date(t.txn_at).toLocaleDateString('en-IN')}</Typography>
+              <Typography variant="caption" color="text.secondary">{t.verification_status.replace('_',' ')}</Typography>
+            </Box>
 
-        <div className="detail-block">
-          <small>LEDGER USER</small>
-          <div className="source">
-            <b>{selected.user?.name||'Unknown user'}</b>
-            <span>{selected.user?.handle||''}</span>
-          </div>
-        </div>
+            <Box sx={{textAlign:'right',alignSelf:'start'}}>
+              <Typography fontWeight={800} color={t.direction==='credit'?'primary.main':'text.primary'}>
+                {t.direction==='credit'?'+':'-'}{money(t.amount)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{display:{xs:'block',sm:'none'}}}>
+                {new Date(t.txn_at).toLocaleDateString('en-IN')}
+              </Typography>
+            </Box>
+          </Box>)}
 
-        <div className="detail-block">
-          <small>STATUS</small>
-          <div className="source"><b>{selected.verification_status.replace('_',' ')}</b></div>
-        </div>
+          {!items.length&&<Box sx={{p:3,textAlign:'center'}}>
+            <Typography fontWeight={700}>No transactions for {scopeLabel} in {period.label}.</Typography>
+            {period.key!=='all'&&<Button sx={{mt:1}} onClick={()=>setPeriodKey('all')}>Show all dates</Button>}
+          </Box>}
+        </Stack>
+      </Paper>
 
-        <div className="detail-block">
-          <small>SOURCES</small>
-          {selected.sources.map((s,i)=><div className="source" key={i}><b>{s.name}</b><span>{s.type.toUpperCase()}</span></div>)}
-        </div>
+      {selected&&<Paper sx={{...clay,p:2.2,minWidth:0,position:{lg:'sticky'},top:{lg:92}}}>
+        <Typography variant="overline" color="text.secondary">TRANSACTION DETAILS</Typography>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2} sx={{mt:.5}}>
+          <Box sx={{minWidth:0}}>
+            <Typography variant="h2" sx={{overflowWrap:'anywhere'}}>{selected.merchant||'Transaction'}</Typography>
+            <Typography variant="caption" color="text.secondary">{new Date(selected.txn_at).toLocaleString('en-IN')}</Typography>
+          </Box>
+          <Typography fontWeight={850} sx={{fontSize:'1.3rem',flex:'0 0 auto'}}>{money(selected.amount)}</Typography>
+        </Stack>
 
-        <details><summary>Advanced details</summary><pre>{selected.description||'No raw description'}</pre></details>
-      </aside>}
-    </div>}
-  </>
+        <Divider sx={{my:2}}/>
+
+        <Box sx={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:1.4}}>
+          <Box><Typography variant="caption" color="text.secondary">Category</Typography><Typography fontWeight={700}>{selected.category}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Account</Typography><Typography fontWeight={700} sx={{overflowWrap:'anywhere'}}>{selected.account}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">User</Typography><Typography fontWeight={700}>{selected.user?.name||'Unknown'}</Typography><Typography variant="caption" color="text.secondary">{selected.user?.handle||''}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">Status</Typography><Typography fontWeight={700}>{selected.verification_status.replace('_',' ')}</Typography></Box>
+        </Box>
+
+        <Divider sx={{my:2}}/>
+        <Typography variant="caption" color="text.secondary">SOURCES</Typography>
+        <Stack spacing=.8 sx={{mt:.8}}>
+          {selected.sources.map((s,i)=><Stack key={i} direction="row" justifyContent="space-between" spacing={1} sx={{p:1,bgcolor:'action.hover',borderRadius:2}}>
+            <Typography variant="body2" fontWeight={700} sx={{overflowWrap:'anywhere'}}>{s.name}</Typography>
+            <Chip size="small" label={s.type.toUpperCase()}/>
+          </Stack>)}
+        </Stack>
+
+        {selected.description&&<>
+          <Divider sx={{my:2}}/>
+          <Typography variant="caption" color="text.secondary">DESCRIPTION</Typography>
+          <Typography variant="body2" sx={{mt:.8,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{selected.description}</Typography>
+        </>}
+      </Paper>}
+    </Box>}
+  </Stack>
 }
