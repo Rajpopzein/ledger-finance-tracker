@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, engine, get_db
 from .models import Account, Category, FamilyMember, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner
-from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin
+from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerSetup, OwnerLogin, FamilySignup
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
@@ -30,6 +30,7 @@ from .services.auth import (
     verify_password,
     create_session,
     read_session,
+    read_session_claims,
 )
 
 app = FastAPI(title="Ledger v1 API")
@@ -50,6 +51,7 @@ PUBLIC_API_PATHS = {
     "/api/auth/status",
     "/api/auth/setup",
     "/api/auth/login",
+    "/api/auth/family-signup",
     "/api/auth/logout",
 }
 
@@ -68,9 +70,26 @@ async def auth_guard(request: Request, call_next):
     if request.method == "OPTIONS" or not path.startswith("/api/") or path in PUBLIC_API_PATHS:
         return await call_next(request)
 
-    owner_id = read_session(request.cookies.get(SESSION_COOKIE))
-    if owner_id != 1:
+    claims = read_session_claims(request.cookies.get(SESSION_COOKIE))
+    if not claims:
         return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+    request.state.auth = claims
+    if claims.get("role") == "owner" and int(claims.get("sub", 0)) != 1:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
+    if claims.get("role") == "family":
+        allowed = (
+            request.method == "GET"
+            and (
+                path == "/api/summary"
+                or path == "/api/transactions"
+                or path == "/api/family-members"
+                or path == "/api/auth/status"
+            )
+        ) or path == "/api/auth/logout"
+        if not allowed:
+            return JSONResponse({"detail": "Owner access required"}, status_code=403)
 
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         origin = request.headers.get("origin")
@@ -103,11 +122,35 @@ def _set_session_cookie(response: Response, request: Request, token: str):
 @app.get("/api/auth/status")
 def auth_status(request: Request, db: Session = Depends(get_db)):
     owner = db.get(Owner, 1)
-    session_owner = read_session(request.cookies.get(SESSION_COOKIE))
+    claims = read_session_claims(request.cookies.get(SESSION_COOKIE))
+    if not claims:
+        return {
+            "setup_required": owner is None,
+            "authenticated": False,
+            "role": None,
+            "email": None,
+            "family_member_id": None,
+            "family_member_name": None,
+        }
+
+    if claims.get("role") == "family":
+        member = db.get(FamilyMember, int(claims["sub"]))
+        return {
+            "setup_required": owner is None,
+            "authenticated": bool(member and member.is_active and member.email),
+            "role": "family",
+            "email": member.email if member else None,
+            "family_member_id": member.id if member else None,
+            "family_member_name": member.name if member else None,
+        }
+
     return {
         "setup_required": owner is None,
-        "authenticated": owner is not None and session_owner == owner.id,
-        "email": owner.email if owner is not None and session_owner == owner.id else None,
+        "authenticated": owner is not None and int(claims.get("sub", 0)) == owner.id,
+        "role": "owner",
+        "email": owner.email if owner is not None else None,
+        "family_member_id": None,
+        "family_member_name": None,
     }
 
 @app.post("/api/auth/setup")
@@ -133,16 +176,47 @@ def auth_setup(body: OwnerSetup, request: Request, response: Response, db: Sessi
 def auth_login(body: OwnerLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     email = str(body.email).strip().lower()
     owner = db.scalar(select(Owner).where(func.lower(Owner.email) == email))
-    if owner is None or not verify_password(body.password, owner.password_salt, owner.password_hash):
-        raise HTTPException(401, "Invalid email or password")
+    if owner is not None and verify_password(body.password, owner.password_salt, owner.password_hash):
+        _set_session_cookie(response, request, create_session(owner.id, "owner"))
+        return {"ok": True, "email": owner.email, "role": "owner"}
 
-    _set_session_cookie(response, request, create_session(owner.id))
-    return {"ok": True, "email": owner.email}
+    member = db.scalar(select(FamilyMember).where(func.lower(FamilyMember.email) == email))
+    if (
+        member is not None
+        and member.is_active
+        and member.password_salt
+        and member.password_hash
+        and verify_password(body.password, member.password_salt, member.password_hash)
+    ):
+        _set_session_cookie(response, request, create_session(member.id, "family"))
+        return {"ok": True, "email": member.email, "role": "family"}
+
+    raise HTTPException(401, "Invalid email or password")
 
 @app.post("/api/auth/logout")
 def auth_logout(response: Response):
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"ok": True}
+
+@app.post("/api/auth/family-signup")
+def family_signup(body: FamilySignup, request: Request, response: Response, db: Session = Depends(get_db)):
+    code = body.member_code.strip()
+    email = str(body.email).strip().lower()
+    member = db.scalar(select(FamilyMember).where(func.lower(FamilyMember.member_code) == code.lower()))
+    if not member or not member.is_active:
+        raise HTTPException(404, "Family member ID not found")
+    if member.email:
+        raise HTTPException(409, "This family member is already registered")
+    if db.scalar(select(Owner).where(func.lower(Owner.email) == email)) or db.scalar(select(FamilyMember).where(func.lower(FamilyMember.email) == email)):
+        raise HTTPException(409, "Email is already in use")
+    salt, password_hash = hash_password(body.password)
+    member.email = email
+    member.password_salt = salt
+    member.password_hash = password_hash
+    db.commit()
+    _set_session_cookie(response, request, create_session(member.id, "family"))
+    return {"ok": True, "email": member.email, "role": "family", "family_member_id": member.id}
+
 
 @app.get("/api/accounts")
 def accounts(db:Session=Depends(get_db)):
@@ -203,6 +277,7 @@ def _filtered_stmt(
 
 @app.get("/api/transactions")
 def transactions(
+    request:Request,
     q:str|None=None,
     status:str|None=None,
     from_date:date|None=None,
@@ -211,6 +286,10 @@ def transactions(
     family_member_id:int|None=None,
     db:Session=Depends(get_db),
 ):
+    claims=getattr(request.state,"auth",None)
+    if claims and claims.get("role")=="family":
+        family_scope="all"
+        family_member_id=int(claims["sub"])
     stmt=_filtered_stmt(from_date,to_date,family_scope,family_member_id).order_by(Transaction.txn_at.desc()).limit(500)
     items=db.scalars(stmt).all()
     if q:
@@ -289,12 +368,18 @@ def exclude(tx_id:int, db:Session=Depends(get_db)):
 
 @app.get("/api/summary")
 def summary(
+    request:Request,
     from_date:date|None=None,
     to_date:date|None=None,
     family_scope:str="self",
     family_member_id:int|None=None,
     db:Session=Depends(get_db),
 ):
+    claims=getattr(request.state,"auth",None)
+    if claims and claims.get("role")=="family":
+        family_scope="all"
+        family_member_id=int(claims["sub"])
+
     items=db.scalars(
         _filtered_stmt(from_date,to_date,family_scope,family_member_id)
         .where(Transaction.excluded_from_analytics==False)
@@ -511,7 +596,8 @@ def save_ai_settings(body:AISettingsIn, db:Session=Depends(get_db)):
 
 @app.post("/api/ai/ask")
 async def ai_ask(body:AIQuestion, db:Session=Depends(get_db)):
-    data=summary(body.from_date, body.to_date, "self", None, db)
+    fake_request=type("R",(),{"state":type("S",(),{"auth":{"role":"owner","sub":1}})()})()
+    data=summary(fake_request, body.from_date, body.to_date, "self", None, db)
     safe={"income":data["income"],"spent":data["spent"],"available":data["available"],"categories":data["categories"][:10]}
     try: answer=await ask_model(db,body.question,safe)
     except Exception as e: raise HTTPException(400,str(e))
