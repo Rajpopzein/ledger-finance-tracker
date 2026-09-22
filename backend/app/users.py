@@ -41,6 +41,13 @@ def serialize_user(user: User):
         "phone": user.phone,
     }
 
+def serialize_public_user(user: User):
+    return {
+        "id": user.id,
+        "handle": f"@{user.handle}",
+        "name": user.name,
+    }
+
 @router.post("/api/auth/signup")
 def signup(body: UserSignup, db: Session = Depends(get_db)):
     email = str(body.email).strip().lower()
@@ -155,7 +162,7 @@ def family_network(request: Request, db: Session = Depends(get_db)):
 
         item = {
             "link_id": link.id,
-            "user": serialize_user(other),
+            "user": serialize_public_user(other),
             "status": link.status,
             "direction": "outgoing" if link.requester_user_id == user_id else "incoming",
             "label": (
@@ -228,7 +235,7 @@ def create_family_link(
     return {
         "link_id": link.id,
         "status": link.status,
-        "user": serialize_user(target),
+        "user": serialize_public_user(target),
     }
 
 @router.post("/api/family-links/{link_id}/action")
