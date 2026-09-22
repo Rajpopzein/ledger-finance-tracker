@@ -362,13 +362,14 @@ def serialize_tx(t):
     }
 
 @app.post("/api/transactions/cash")
-def create_cash(body:CashTransactionCreate, db:Session=Depends(get_db)):
+def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
     category=db.scalar(select(Category).where(func.lower(Category.name)==body.category.lower()))
     if not category:
         category=Category(name=body.category); db.add(category); db.flush()
-    cash=db.scalar(select(Account).where(Account.type=="cash"))
+    cash=db.scalar(select(Account).where(Account.user_id==user_id,Account.type=="cash"))
     if not cash:
-        cash=Account(name="Cash",institution="Cash",type="cash",is_active=True)
+        cash=Account(user_id=user_id,name="Cash",institution="Cash",type="cash",is_active=True)
         db.add(cash); db.flush()
 
     fp=fingerprint(cash.id, body.txn_at, body.amount, "debit", body.note or body.category)
@@ -376,6 +377,7 @@ def create_cash(body:CashTransactionCreate, db:Session=Depends(get_db)):
         select(Transaction)
         .join(TransactionSource, TransactionSource.transaction_id==Transaction.id)
         .where(
+            Transaction.user_id==user_id,
             Transaction.account_id==cash.id,
             Transaction.fingerprint==fp,
             TransactionSource.source_type=="manual",
@@ -386,6 +388,7 @@ def create_cash(body:CashTransactionCreate, db:Session=Depends(get_db)):
         return serialize_tx(existing)
 
     tx=Transaction(
+        user_id=user_id,
         account_id=cash.id,
         category_id=category.id,
         txn_at=body.txn_at,
@@ -403,9 +406,10 @@ def create_cash(body:CashTransactionCreate, db:Session=Depends(get_db)):
     return serialize_tx(tx)
 
 @app.patch("/api/transactions/{tx_id}/exclude")
-def exclude(tx_id:int, db:Session=Depends(get_db)):
+def exclude(tx_id:int, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
     tx=db.get(Transaction,tx_id)
-    if not tx: raise HTTPException(404,"Transaction not found")
+    if not tx or tx.user_id!=user_id: raise HTTPException(404,"Transaction not found")
     tx.excluded_from_analytics=not tx.excluded_from_analytics; db.commit()
     return {"id":tx.id,"excluded":tx.excluded_from_analytics}
 
