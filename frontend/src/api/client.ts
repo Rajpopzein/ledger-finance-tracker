@@ -65,6 +65,20 @@ export const api={
    return req<any>('/imports/reprocess',{method:'POST',body:f})
  },
  commit:(token:string)=>req<any>(`/imports/commit/${token}`,{method:'POST'}),
+ upiPreview:(accountId:number,app:string,file:File)=>{
+   const f=new FormData()
+   f.append('account_id',String(accountId))
+   f.append('app',app)
+   f.append('file',file)
+   return req<any>('/imports/upi/preview',{method:'POST',body:f})
+ },
+ upiCommit:(accountId:number,app:string,file:File)=>{
+   const f=new FormData()
+   f.append('account_id',String(accountId))
+   f.append('app',app)
+   f.append('file',file)
+   return req<any>('/imports/upi/commit',{method:'POST',body:f})
+ },
  aiSettings:()=>req<any>('/ai/settings'),
  saveAI:(body:any)=>req('/ai/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  askAI:(question:string,from?:string,to?:string)=>req<any>('/ai/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,from_date:from||null,to_date:to||null})})
