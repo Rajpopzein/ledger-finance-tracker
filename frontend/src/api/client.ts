@@ -58,6 +58,12 @@ export const api={
    f.append('file',file)
    return req<any>('/imports/preview',{method:'POST',body:f})
  },
+ reprocess:(accountId:number,file:File)=>{
+   const f=new FormData()
+   f.append('account_id',String(accountId))
+   f.append('file',file)
+   return req<any>('/imports/reprocess',{method:'POST',body:f})
+ },
  commit:(token:string)=>req<any>(`/imports/commit/${token}`,{method:'POST'}),
  aiSettings:()=>req<any>('/ai/settings'),
  saveAI:(body:any)=>req('/ai/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
