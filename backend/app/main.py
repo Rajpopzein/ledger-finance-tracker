@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User
+from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User, Debt
 from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -22,6 +22,7 @@ from .services.secrets import encrypt
 from .services.ai import ask_model
 from .upi_imports import router as upi_imports_router
 from .bank_imports import router as bank_imports_router
+from .finance_features import router as finance_features_router
 from .users import router as users_router, linked_user_ids, current_user_id
 from .services.auth import (
     SESSION_COOKIE,
@@ -35,6 +36,7 @@ app = FastAPI(title="Ledger v1 API")
 app.include_router(upi_imports_router)
 app.include_router(bank_imports_router)
 app.include_router(users_router)
+app.include_router(finance_features_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
@@ -636,7 +638,30 @@ def save_ai_settings(body:AISettingsIn, request:Request, db:Session=Depends(get_
 async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
     user_id=current_user_id(request)
     data=summary(request, body.from_date, body.to_date, "self", None, db)
-    safe={"income":data["income"],"spent":data["spent"],"available":data["available"],"categories":data["categories"][:10]}
+    debts=db.scalars(
+        select(Debt).where(Debt.user_id==user_id,Debt.status=="active").order_by(Debt.created_at.desc())
+    ).all()
+    safe={
+        "income":data["income"],
+        "spent":data["spent"],
+        "available":data["available"],
+        "categories":data["categories"][:10],
+        "debt":{
+            "total_outstanding":float(sum((d.outstanding_balance for d in debts),Decimal("0"))),
+            "monthly_emi":float(sum((d.emi_amount or Decimal("0") for d in debts),Decimal("0"))),
+            "items":[
+                {
+                    "lender":d.lender,
+                    "type":d.debt_type,
+                    "outstanding":float(d.outstanding_balance),
+                    "interest_rate":float(d.interest_rate) if d.interest_rate is not None else None,
+                    "emi":float(d.emi_amount) if d.emi_amount is not None else None,
+                    "next_due_date":d.next_due_date.date().isoformat() if d.next_due_date else None,
+                }
+                for d in debts[:20]
+            ],
+        },
+    }
     try: answer=await ask_model(db,user_id,body.question,safe)
     except Exception as e: raise HTTPException(400,str(e))
     return {"answer":answer,"calculated":safe}
