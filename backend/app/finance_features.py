@@ -64,6 +64,10 @@ async def ai_categorize_transactions(
         select(Category.name).where(Category.user_id == user_id).order_by(Category.name)
     ).all()
     allowed = list(dict.fromkeys([*DEFAULT_CATEGORIES, *custom]))
+    eligible = [tx for tx in txs if tx.category_id is None or tx.category_source == "ai"]
+    if not eligible:
+        return {"requested": len(ids), "eligible": 0, "applied": 0, "items": []}
+
     payload = [
         {
             "transaction_id": tx.id,
@@ -73,7 +77,7 @@ async def ai_categorize_transactions(
             "merchant": tx.merchant,
             "description": tx.description_raw,
         }
-        for tx in txs
+        for tx in eligible
     ]
 
     try:
@@ -81,7 +85,7 @@ async def ai_categorize_transactions(
     except Exception as exc:
         raise HTTPException(400, str(exc))
 
-    by_id = {tx.id: tx for tx in txs}
+    by_id = {tx.id: tx for tx in eligible}
     applied = []
     for suggestion in suggestions:
         tx = by_id.get(suggestion["transaction_id"])
@@ -99,6 +103,7 @@ async def ai_categorize_transactions(
     db.commit()
     return {
         "requested": len(ids),
+        "eligible": len(eligible),
         "applied": len(applied),
         "items": applied,
     }
