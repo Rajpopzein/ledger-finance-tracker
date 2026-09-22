@@ -1,11 +1,30 @@
 import {useEffect,useState} from 'react'
-import {Link} from 'react-router-dom'
+import {Link as RouterLink} from 'react-router-dom'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+} from '@mui/material'
+import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded'
+import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded'
 import {api} from '../api/client'
 import UPIImport from '../components/UPIImport'
+import {claySx,useUI} from '../ui'
 
 type ImportStage='idle'|'uploading'|'committing'|'reprocessing'
 
 export default function ImportReview(){
+  const {resolvedMode}=useUI()
   const [accounts,setAccounts]=useState<any[]>([])
   const [account,setAccount]=useState<number|undefined>()
   const [preview,setPreview]=useState<any>(null)
@@ -16,6 +35,7 @@ export default function ImportReview(){
   const [mode,setMode]=useState<'bank'|'upi'>('bank')
 
   const busy=stage!=='idle'
+  const clay=claySx(resolvedMode)
 
   useEffect(()=>{
     api.accounts().then(a=>{
@@ -69,147 +89,130 @@ export default function ImportReview(){
     }
   }
 
-  return <>
-    <div className="page-head">
-      <div>
-        <small>SAFE IMPORT</small>
-        <h1>Import transactions</h1>
-        <p>Reconcile bank statements and UPI app history without creating duplicate expenses.</p>
-      </div>
-    </div>
+  return <Stack spacing={2.2}>
+    <Box>
+      <Typography variant="overline" color="text.secondary">SAFE IMPORT</Typography>
+      <Typography variant="h1">Import transactions</Typography>
+      <Typography color="text.secondary" sx={{mt:.6}}>Reconcile bank statements and UPI app history without creating duplicate expenses.</Typography>
+    </Box>
 
-    <div className="import-tabs" role="tablist" aria-label="Import source">
-      <button className={mode==='bank'?'active':''} onClick={()=>setMode('bank')}>Bank statement</button>
-      <button className={mode==='upi'?'active':''} onClick={()=>setMode('upi')}>UPI apps</button>
-    </div>
+    <Paper sx={{...clay,p:.6,width:'fit-content',maxWidth:'100%'}}>
+      <Tabs value={mode} onChange={(_,value)=>setMode(value)} variant="scrollable" scrollButtons="auto">
+        <Tab value="bank" label="Bank statement"/>
+        <Tab value="upi" label="UPI apps"/>
+      </Tabs>
+    </Paper>
 
-    {mode==='upi'
-      ? <UPIImport/>
-      : <div className="gridImport">
-      <section>
-        <div className="upload card">
-          {accounts.length
-            ? <>
-                <select value={account||''} disabled={busy} onChange={e=>setAccount(Number(e.target.value))}>
-                  {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+    {mode==='upi'?<UPIImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:2}}>
+      <Stack spacing={2}>
+        <Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+          {accounts.length? <Stack spacing={1.6}>
+            <FormControl size="small">
+              <InputLabel>Bank account</InputLabel>
+              <Select
+                label="Bank account"
+                value={account||''}
+                disabled={busy}
+                onChange={e=>setAccount(Number(e.target.value))}
+              >
+                {accounts.map(a=><MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>)}
+              </Select>
+            </FormControl>
 
-                <label className={`drop ${stage==='uploading'?'drop-busy':''}`}>
-                  {stage==='uploading'
-                    ? <>
-                        <div className="upload-spinner" aria-hidden="true"/>
-                        <b>Uploading & checking statement…</b>
-                        <span>{fileName}</span>
-                        <div className="upload-progress" aria-label="Upload in progress"><i/></div>
-                        <small>Please keep this page open while Ledger validates the file.</small>
-                      </>
-                    : <>
-                        <b>{fileName?'Choose another statement':'Choose statement'}</b>
-                        <span>{fileName?fileName:'CSV, XLSX or XLS'}</span>
-                        <small>{fileName?'Select a file to replace the current selection.':'Ledger will preview transactions before importing anything.'}</small>
-                      </>
-                  }
+            <Button
+              component="label"
+              variant="outlined"
+              startIcon={<CloudUploadRoundedIcon/>}
+              disabled={busy}
+              sx={{minHeight:110,borderStyle:'dashed',display:'flex',flexDirection:'column',gap:.5}}
+            >
+              <Typography fontWeight={750}>{stage==='uploading'?'Uploading & checking…':fileName?'Choose another statement':'Choose statement'}</Typography>
+              <Typography variant="caption" color="text.secondary">{fileName||'CSV, XLSX or XLS'}</Typography>
+              <input
+                hidden
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={e=>{
+                  const file=e.target.files?.[0]
+                  if(file)pick(file)
+                  e.currentTarget.value=''
+                }}
+              />
+            </Button>
+          </Stack>:<Alert severity="info" action={<Button component={RouterLink} to="/settings">Settings</Button>}>
+            Add a bank account before importing a bank statement.
+          </Alert>}
+        </Paper>
 
-                  <input
-                    type="file"
-                    accept=".csv,.xlsx,.xls"
-                    disabled={busy}
-                    onChange={e=>{
-                      const file=e.target.files?.[0]
-                      if(file)pick(file)
-                      e.currentTarget.value=''
-                    }}
-                  />
-                </label>
-              </>
-            : <div className="empty">
-                <b>No bank account configured.</b><br/>
-                Add your bank account in Settings before importing a statement.
-                <div style={{marginTop:14}}>
-                  <Link className="secondary" to="/settings">Open Settings</Link>
-                </div>
-              </div>
-          }
-        </div>
+        {error&&<Alert severity="error">{error}</Alert>}
 
-        {error&&<div className="attention">{error}</div>}
+        {preview&&<Paper sx={{...clay,p:{xs:2,sm:2.5}}}>
+          <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={1} sx={{mb:2}}>
+            <Typography variant="h2">Import preview</Typography>
+            {fileName&&<Chip label={fileName} variant="outlined" sx={{maxWidth:{xs:'100%',sm:280}}}/>}
+          </Stack>
 
-        {preview&&<div className="card">
-          <div className="row between">
-            <h2>Import preview</h2>
-            {fileName&&<span className="import-file-name">{fileName}</span>}
-          </div>
+          {preview.already_imported?<>
+            {preview.reprocessed
+              ? <Alert severity="success">Reprocessed {preview.reprocessed.replaced} transactions. {preview.reprocessed.debits} debits and {preview.reprocessed.credits} credits are now mapped from the statement.</Alert>
+              : <Stack spacing={1.5}>
+                  {typeof preview.detected==='number'&&<Box sx={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:1}}>
+                    {[
+                      ['FOUND',preview.detected],
+                      ['DEBITS',preview.debits??0],
+                      ['CREDITS',preview.credits??0]
+                    ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:2.5}}>
+                      <Typography variant="caption" color="text.secondary">{label}</Typography>
+                      <Typography variant="h2">{value}</Typography>
+                    </Paper>)}
+                  </Box>}
+                  <Alert severity="warning">This exact statement was already imported. Review the debit/credit counts, then reprocess to replace the old mapping.</Alert>
+                  <Button startIcon={<RestartAltRoundedIcon/>} variant="contained" onClick={reprocess} disabled={busy||!selectedFile}>
+                    {stage==='reprocessing'?'Reprocessing…':'Reprocess statement'}
+                  </Button>
+                </Stack>}
+          </>:<>
+            <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1,mb:1.5}}>
+              {[
+                ['FOUND',preview.detected],
+                ['NEW',preview.new],
+                ['MATCHED',preview.matched],
+                ['REVIEW',preview.review]
+              ].map(([label,value])=><Paper variant="outlined" key={String(label)} sx={{p:1.2,borderRadius:2.5}}>
+                <Typography variant="caption" color="text.secondary">{label}</Typography>
+                <Typography variant="h2">{value}</Typography>
+              </Paper>)}
+            </Box>
 
-          {preview.already_imported
-            ? <>
-                {preview.reprocessed
-                  ? <div className="success">
-                      Reprocessed {preview.reprocessed.replaced} transactions.
-                      {' '}{preview.reprocessed.debits} debits and {preview.reprocessed.credits} credits are now mapped from the statement.
-                    </div>
-                  : <>
-                      {typeof preview.detected==='number'&&<div className="preview-grid direction-preview">
-                        <div><small>FOUND</small><b>{preview.detected}</b></div>
-                        <div><small>DEBITS</small><b>{preview.debits??0}</b></div>
-                        <div><small>CREDITS</small><b>{preview.credits??0}</b></div>
-                      </div>}
-                      <div className="attention">
-                        This exact statement was already imported. Review the debit/credit counts above, then reprocess to replace the old mapping.
-                      </div>
-                      <button className="primary" onClick={reprocess} disabled={busy||!selectedFile}>
-                        {stage==='reprocessing'?'Reprocessing statement…':'Reprocess statement'}
-                      </button>
-                      {stage==='reprocessing'&&
-                        <div className="commit-status">
-                          <div className="upload-spinner small" aria-hidden="true"/>
-                          Rebuilding transactions from the corrected Dr/Cr mapping…
-                        </div>
-                      }
-                    </>
-                }
-              </>
-            : <>
-                <div className="preview-grid">
-                  <div><small>FOUND</small><b>{preview.detected}</b></div>
-                  <div><small>NEW</small><b>{preview.new}</b></div>
-                  <div><small>MATCHED</small><b>{preview.matched}</b></div>
-                  <div><small>REVIEW</small><b>{preview.review}</b></div>
-                </div>
+            {preview.committed
+              ? <Alert severity="success">
+                  {preview.committed.already_imported
+                    ? 'This exact statement is already in your ledger. Nothing new was added.'
+                    : `Imported ${preview.committed.inserted} new transactions and verified ${preview.committed.matched} existing records.`}
+                </Alert>
+              : <Button variant="contained" onClick={commit} disabled={busy||!selectedFile}>
+                  {stage==='committing'?'Adding transactions…':`Add ${preview.new} new transactions`}
+                </Button>}
+          </>}
+        </Paper>}
+      </Stack>
 
-                {preview.committed
-                  ? <div className="success">
-                      {preview.committed.already_imported
-                        ? 'This exact statement is already in your ledger. Nothing new was added.'
-                        : `Imported ${preview.committed.inserted} new transactions and verified ${preview.committed.matched} existing records.`}
-                    </div>
-                  : <>
-                      <button className="primary" onClick={commit} disabled={busy}>
-                        {stage==='committing'?'Adding transactions…':`Add ${preview.new} new transactions`}
-                      </button>
-                      {stage==='committing'&&
-                        <div className="commit-status">
-                          <div className="upload-spinner small" aria-hidden="true"/>
-                          Saving transactions to your ledger…
-                        </div>
-                      }
-                    </>
-                }
-              </>
-          }
-        </div>}
-      </section>
-
-      <aside className="card">
-        <h2>Duplicate protection</h2>
-        <div className="steps">
-          <div><b>1</b><span>Normalize statement rows</span></div>
-          <div><b>2</b><span>Match bank/UPI references</span></div>
-          <div><b>3</b><span>Check deterministic fingerprint</span></div>
-          <div><b>4</b><span>Send uncertain matches to review</span></div>
-          <div><b>5</b><span>Add only genuinely new ledger entries</span></div>
-        </div>
-        <p className="muted">The same transaction can appear in multiple sources without becoming multiple expenses.</p>
-      </aside>
-    </div>}
-  </>
+      <Paper sx={{...clay,p:2.2,height:'fit-content'}}>
+        <Typography variant="h2">Duplicate protection</Typography>
+        <Stack spacing={1.4} sx={{mt:1.6}}>
+          {[
+            'Normalize statement rows',
+            'Match bank/UPI references',
+            'Check deterministic fingerprint',
+            'Send uncertain matches to review',
+            'Add only genuinely new ledger entries',
+          ].map((step,index)=><Stack key={step} direction="row" spacing={1.1} alignItems="flex-start">
+            <Chip size="small" label={index+1} color="primary"/>
+            <Typography variant="body2">{step}</Typography>
+          </Stack>)}
+        </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{display:'block',mt:2}}>The same transaction can appear in multiple sources without becoming multiple expenses.</Typography>
+      </Paper>
+    </Box>}
+  </Stack>
 }
