@@ -13,6 +13,10 @@ class UserProfileUpdate(BaseModel):
     handle: str = Field(min_length=3, max_length=40)
     phone: str | None = Field(default=None, max_length=30)
 
+class UserPreferencesUpdate(BaseModel):
+    theme_mode: str = Field(pattern="^(light|dark|system)$")
+    dashboard_template: str = Field(pattern="^(balanced|focus|insights)$")
+
 class FamilyLinkCreate(BaseModel):
     handle: str = Field(min_length=3, max_length=40)
     label: str | None = Field(default=None, max_length=50)
