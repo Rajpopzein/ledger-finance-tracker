@@ -83,3 +83,16 @@ input[type="datetime-local"],input[type="number"],input[type="file"]{width:100%;
   }
   .shell header{gap:10px}
 }
+
+
+.import-tabs{display:flex;gap:8px;margin:-4px 0 18px;background:var(--panel);border:1px solid rgba(134,148,138,.14);padding:5px;border-radius:12px;width:max-content;max-width:100%}
+.import-tabs button{border:0;background:transparent;color:var(--muted);padding:9px 13px;border-radius:9px;cursor:pointer;font-weight:650}
+.import-tabs button.active{background:var(--panel3);color:var(--text)}
+.direction-summary{display:flex;gap:8px;flex-wrap:wrap;margin:-5px 0 15px}
+.direction-summary span,.source-pill{display:inline-flex!important;align-items:center;width:max-content;background:rgba(78,222,163,.09);border:1px solid rgba(78,222,163,.2);color:var(--green)!important;border-radius:999px;padding:4px 8px;font-size:10px!important;font-style:normal;font-weight:650;line-height:1;margin-top:6px!important}
+.upi-preview-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:640px){
+  .import-tabs{width:100%}
+  .import-tabs button{flex:1}
+  .upi-preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
