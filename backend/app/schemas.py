@@ -58,3 +58,40 @@ class AIQuestion(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     from_date: date | None = None
     to_date: date | None = None
+
+
+class AICategorizeRequest(BaseModel):
+    transaction_ids: list[int] = Field(min_length=1, max_length=100)
+
+class DebtCreate(BaseModel):
+    lender: str = Field(min_length=1, max_length=160)
+    debt_type: str = Field(default="loan", min_length=1, max_length=50)
+    principal: Decimal = Field(gt=0)
+    outstanding_balance: Decimal = Field(ge=0)
+    interest_rate: Decimal | None = Field(default=None, ge=0, le=100)
+    emi_amount: Decimal | None = Field(default=None, ge=0)
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    next_due_date: datetime | None = None
+    status: str = Field(default="active", pattern="^(active|closed|paused)$")
+    notes: str | None = Field(default=None, max_length=2000)
+    source_type: str = Field(default="manual", max_length=30)
+    source_file_name: str | None = Field(default=None, max_length=255)
+
+class DebtUpdate(BaseModel):
+    lender: str | None = Field(default=None, min_length=1, max_length=160)
+    debt_type: str | None = Field(default=None, min_length=1, max_length=50)
+    principal: Decimal | None = Field(default=None, gt=0)
+    outstanding_balance: Decimal | None = Field(default=None, ge=0)
+    interest_rate: Decimal | None = Field(default=None, ge=0, le=100)
+    emi_amount: Decimal | None = Field(default=None, ge=0)
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    next_due_date: datetime | None = None
+    status: str | None = Field(default=None, pattern="^(active|closed|paused)$")
+    notes: str | None = Field(default=None, max_length=2000)
+
+class DebtPaymentCreate(BaseModel):
+    amount: Decimal = Field(gt=0)
+    paid_at: datetime
+    note: str | None = Field(default=None, max_length=255)
