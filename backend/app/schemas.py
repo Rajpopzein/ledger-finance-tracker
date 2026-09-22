@@ -16,6 +16,13 @@ class AccountCreate(BaseModel):
     name: str | None = Field(default=None, max_length=100)
     type: str = "bank"
 
+class FamilyMemberCreate(BaseModel):
+    member_code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=100)
+
+class FamilyMemberTag(BaseModel):
+    family_member_id: int | None = None
+
 class CashTransactionCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     category: str
