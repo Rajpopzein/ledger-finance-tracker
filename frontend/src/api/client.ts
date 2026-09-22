@@ -2,17 +2,28 @@ const API=import.meta.env.VITE_API_URL || '/api'
 
 async function req<T>(path:string,init?:RequestInit):Promise<T>{
   const r=await fetch(API+path,{...init,credentials:'include'})
-  if(!r.ok){
-    let message=r.statusText
+  const raw=await r.text()
+
+  let body:any=null
+  if(raw){
     try{
-      const body=await r.json()
-      message=body.detail||JSON.stringify(body)
+      body=JSON.parse(raw)
     }catch{
-      message=(await r.text())||message
+      body=raw
     }
+  }
+
+  if(!r.ok){
+    const message=
+      body && typeof body==='object' && body.detail
+        ? body.detail
+        : typeof body==='string' && body
+          ? body
+          : r.statusText || `Request failed with status ${r.status}`
     throw new Error(message)
   }
-  return r.json()
+
+  return body as T
 }
 
 const dateQs=(from?:string,to?:string)=>{
