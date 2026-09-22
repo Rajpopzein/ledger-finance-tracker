@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import {Link} from 'react-router-dom'
 import {api} from '../api/client'
 
-type ImportStage='idle'|'uploading'|'committing'
+type ImportStage='idle'|'uploading'|'committing'|'reprocessing'
 
 export default function ImportReview(){
   const [accounts,setAccounts]=useState<any[]>([])
@@ -11,6 +11,7 @@ export default function ImportReview(){
   const [stage,setStage]=useState<ImportStage>('idle')
   const [error,setError]=useState('')
   const [fileName,setFileName]=useState('')
+  const [selectedFile,setSelectedFile]=useState<File|null>(null)
 
   const busy=stage!=='idle'
 
@@ -26,6 +27,7 @@ export default function ImportReview(){
     if(!account)return
     setStage('uploading')
     setFileName(file.name)
+    setSelectedFile(file)
     setPreview(null)
     setError('')
     try{
@@ -46,6 +48,20 @@ export default function ImportReview(){
       setPreview({...preview,committed:r})
     }catch(e:any){
       setError(e.message||'Could not import this statement.')
+    }finally{
+      setStage('idle')
+    }
+  }
+
+  async function reprocess(){
+    if(!account||!selectedFile)return
+    setStage('reprocessing')
+    setError('')
+    try{
+      const r=await api.reprocess(account,selectedFile)
+      setPreview({...preview,reprocessed:r})
+    }catch(e:any){
+      setError(e.message||'Could not reprocess this statement.')
     }finally{
       setStage('idle')
     }
@@ -116,7 +132,28 @@ export default function ImportReview(){
           </div>
 
           {preview.already_imported
-            ? <div className="attention">This exact statement was already imported. Nothing will be added.</div>
+            ? <>
+                {preview.reprocessed
+                  ? <div className="success">
+                      Reprocessed {preview.reprocessed.replaced} transactions.
+                      {' '}{preview.reprocessed.debits} debits and {preview.reprocessed.credits} credits are now mapped from the statement.
+                    </div>
+                  : <>
+                      <div className="attention">
+                        This exact statement was already imported. If its debit/credit mapping was wrong, you can safely reprocess this file using the corrected parser.
+                      </div>
+                      <button className="primary" onClick={reprocess} disabled={busy||!selectedFile}>
+                        {stage==='reprocessing'?'Reprocessing statement…':'Reprocess statement'}
+                      </button>
+                      {stage==='reprocessing'&&
+                        <div className="commit-status">
+                          <div className="upload-spinner small" aria-hidden="true"/>
+                          Rebuilding transactions from the corrected Dr/Cr mapping…
+                        </div>
+                      }
+                    </>
+                }
+              </>
             : <>
                 <div className="preview-grid">
                   <div><small>FOUND</small><b>{preview.detected}</b></div>
