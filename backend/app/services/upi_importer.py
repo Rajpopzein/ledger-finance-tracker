@@ -5,6 +5,7 @@ import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
+import xlrd
 
 APP_LABELS = {
     "google_pay": "Google Pay",
@@ -275,6 +276,20 @@ def parse_upi_statement(app: str, name: str, content: bytes):
         matrix = list(ws.iter_rows(values_only=True))
         return normalize_upi_rows(_matrix_rows(matrix), app)
 
+    if lower.endswith(".xls"):
+        book = xlrd.open_workbook(file_contents=content)
+        sheet = book.sheet_by_index(0)
+        matrix = []
+        for row_index in range(sheet.nrows):
+            values = []
+            for cell in sheet.row(row_index):
+                if cell.ctype == xlrd.XL_CELL_DATE:
+                    values.append(xlrd.xldate_as_datetime(cell.value, book.datemode))
+                else:
+                    values.append(cell.value)
+            matrix.append(values)
+        return normalize_upi_rows(_matrix_rows(matrix), app)
+
     if lower.endswith(".json"):
         try:
             payload = json.loads(content.decode("utf-8-sig", errors="replace"))
@@ -282,4 +297,4 @@ def parse_upi_statement(app: str, name: str, content: bytes):
             raise ValueError("Invalid JSON export") from exc
         return normalize_upi_rows(_collect_json_rows(payload), app)
 
-    raise ValueError("UPI app import supports CSV, XLSX and JSON files")
+    raise ValueError("UPI app import supports CSV, XLSX, XLS and JSON files")
