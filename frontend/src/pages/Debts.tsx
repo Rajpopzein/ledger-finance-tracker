@@ -197,7 +197,7 @@ export default function Debts(){
 
       {debt.payments?.length>0&&<Box sx={{mt:1.25}}>
         <Typography variant="caption" color="text.secondary">RECENT PAYMENTS</Typography>
-        <Stack spacing=.6 sx={{mt:.5}}>
+        <Stack spacing={0.6} sx={{mt:.5}}>
           {debt.payments.slice(0,3).map(p=><Stack key={p.id} direction="row" justifyContent="space-between">
             <Typography variant="caption">{new Date(p.paid_at).toLocaleDateString('en-IN')}</Typography>
             <Typography variant="caption" sx={{fontWeight:700}}>{money(p.amount)}</Typography>
