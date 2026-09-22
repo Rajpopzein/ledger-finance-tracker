@@ -84,7 +84,7 @@ export default function ImportReview(){
     </div>
 
     {mode==='upi'
-      ? <UPIImport accounts={accounts}/>
+      ? <UPIImport/>
       : <div className="gridImport">
       <section>
         <div className="upload card">
