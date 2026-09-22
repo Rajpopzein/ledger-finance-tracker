@@ -139,8 +139,13 @@ export default function ImportReview(){
                       {' '}{preview.reprocessed.debits} debits and {preview.reprocessed.credits} credits are now mapped from the statement.
                     </div>
                   : <>
+                      {typeof preview.detected==='number'&&<div className="preview-grid direction-preview">
+                        <div><small>FOUND</small><b>{preview.detected}</b></div>
+                        <div><small>DEBITS</small><b>{preview.debits??0}</b></div>
+                        <div><small>CREDITS</small><b>{preview.credits??0}</b></div>
+                      </div>}
                       <div className="attention">
-                        This exact statement was already imported. If its debit/credit mapping was wrong, you can safely reprocess this file using the corrected parser.
+                        This exact statement was already imported. Review the debit/credit counts above, then reprocess to replace the old mapping.
                       </div>
                       <button className="primary" onClick={reprocess} disabled={busy||!selectedFile}>
                         {stage==='reprocessing'?'Reprocessing statement…':'Reprocess statement'}
