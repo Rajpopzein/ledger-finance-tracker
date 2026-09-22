@@ -27,7 +27,7 @@ def normalize_handle(value: str) -> str:
 
 def current_user_id(request: Request) -> int:
     claims = getattr(request.state, "auth", None)
-    if not claims or claims.get("role") != "user":
+    if not claims or claims.get("role") not in ("user", "owner"):
         raise HTTPException(401, "Not authenticated")
     return int(claims["sub"])
 
