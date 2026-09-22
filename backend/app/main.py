@@ -126,32 +126,47 @@ def auth_status(request: Request, db: Session = Depends(get_db)):
     claims = read_session_claims(request.cookies.get(SESSION_COOKIE))
     if not claims:
         return {
-            "setup_required": owner is None,
+            "setup_required": owner is None and db.scalar(select(func.count(User.id))) == 0,
             "authenticated": False,
             "role": None,
             "email": None,
-            "family_member_id": None,
-            "family_member_name": None,
+            "user_id": None,
+            "name": None,
+            "handle": None,
         }
 
-    if claims.get("role") == "family":
-        member = db.get(FamilyMember, int(claims["sub"]))
+    if claims.get("role") == "user":
+        user = db.get(User, int(claims["sub"]))
         return {
-            "setup_required": owner is None,
-            "authenticated": bool(member and member.is_active and member.email),
-            "role": "family",
-            "email": member.email if member else None,
-            "family_member_id": member.id if member else None,
-            "family_member_name": member.name if member else None,
+            "setup_required": False,
+            "authenticated": user is not None,
+            "role": "user",
+            "email": user.email if user else None,
+            "user_id": user.id if user else None,
+            "name": user.name if user else None,
+            "handle": f"@{user.handle}" if user else None,
+        }
+
+    if claims.get("role") == "owner" and owner:
+        user = db.scalar(select(User).where(func.lower(User.email) == owner.email.lower()))
+        return {
+            "setup_required": False,
+            "authenticated": user is not None,
+            "role": "user",
+            "email": user.email if user else owner.email,
+            "user_id": user.id if user else None,
+            "name": user.name if user else "Owner",
+            "handle": f"@{user.handle}" if user else None,
         }
 
     return {
-        "setup_required": owner is None,
-        "authenticated": owner is not None and int(claims.get("sub", 0)) == owner.id,
-        "role": "owner",
-        "email": owner.email if owner is not None else None,
-        "family_member_id": None,
-        "family_member_name": None,
+        "setup_required": False,
+        "authenticated": False,
+        "role": None,
+        "email": None,
+        "user_id": None,
+        "name": None,
+        "handle": None,
     }
 
 @app.post("/api/auth/setup")
