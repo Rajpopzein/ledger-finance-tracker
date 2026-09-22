@@ -122,7 +122,8 @@ class ImportPreview(Base):
 
 class AISetting(Base):
     __tablename__ = "ai_settings"
-    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True, index=True)
     provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     model: Mapped[str | None] = mapped_column(String(120), nullable=True)
