@@ -2,12 +2,17 @@ import {useEffect,useState} from 'react'
 import {Link} from 'react-router-dom'
 import {api} from '../api/client'
 
+type ImportStage='idle'|'uploading'|'committing'
+
 export default function ImportReview(){
   const [accounts,setAccounts]=useState<any[]>([])
   const [account,setAccount]=useState<number|undefined>()
   const [preview,setPreview]=useState<any>(null)
-  const [busy,setBusy]=useState(false)
+  const [stage,setStage]=useState<ImportStage>('idle')
   const [error,setError]=useState('')
+  const [fileName,setFileName]=useState('')
+
+  const busy=stage!=='idle'
 
   useEffect(()=>{
     api.accounts().then(a=>{
@@ -19,7 +24,8 @@ export default function ImportReview(){
 
   async function pick(file:File){
     if(!account)return
-    setBusy(true)
+    setStage('uploading')
+    setFileName(file.name)
     setPreview(null)
     setError('')
     try{
@@ -27,13 +33,13 @@ export default function ImportReview(){
     }catch(e:any){
       setError(e.message||'Could not parse this statement.')
     }finally{
-      setBusy(false)
+      setStage('idle')
     }
   }
 
   async function commit(){
     if(!preview?.preview_token)return
-    setBusy(true)
+    setStage('committing')
     setError('')
     try{
       const r=await api.commit(preview.preview_token)
@@ -41,7 +47,7 @@ export default function ImportReview(){
     }catch(e:any){
       setError(e.message||'Could not import this statement.')
     }finally{
-      setBusy(false)
+      setStage('idle')
     }
   }
 
@@ -59,17 +65,35 @@ export default function ImportReview(){
         <div className="upload card">
           {accounts.length
             ? <>
-                <select value={account||''} onChange={e=>setAccount(Number(e.target.value))}>
+                <select value={account||''} disabled={busy} onChange={e=>setAccount(Number(e.target.value))}>
                   {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
-                <label className="drop">
-                  <b>{busy?'Processing…':'Choose statement'}</b>
-                  <span>CSV or XLSX</span>
+
+                <label className={`drop ${stage==='uploading'?'drop-busy':''}`}>
+                  {stage==='uploading'
+                    ? <>
+                        <div className="upload-spinner" aria-hidden="true"/>
+                        <b>Uploading & checking statement…</b>
+                        <span>{fileName}</span>
+                        <div className="upload-progress" aria-label="Upload in progress"><i/></div>
+                        <small>Please keep this page open while Ledger validates the file.</small>
+                      </>
+                    : <>
+                        <b>{fileName?'Choose another statement':'Choose statement'}</b>
+                        <span>{fileName?fileName:'CSV or XLSX'}</span>
+                        <small>{fileName?'Select a file to replace the current selection.':'Ledger will preview transactions before importing anything.'}</small>
+                      </>
+                  }
+
                   <input
                     type="file"
                     accept=".csv,.xlsx"
                     disabled={busy}
-                    onChange={e=>e.target.files?.[0]&&pick(e.target.files[0])}
+                    onChange={e=>{
+                      const file=e.target.files?.[0]
+                      if(file)pick(file)
+                      e.currentTarget.value=''
+                    }}
                   />
                 </label>
               </>
@@ -86,7 +110,11 @@ export default function ImportReview(){
         {error&&<div className="attention">{error}</div>}
 
         {preview&&<div className="card">
-          <h2>Import preview</h2>
+          <div className="row between">
+            <h2>Import preview</h2>
+            {fileName&&<span className="import-file-name">{fileName}</span>}
+          </div>
+
           {preview.already_imported
             ? <div className="attention">This exact statement was already imported. Nothing will be added.</div>
             : <>
@@ -96,9 +124,20 @@ export default function ImportReview(){
                   <div><small>MATCHED</small><b>{preview.matched}</b></div>
                   <div><small>REVIEW</small><b>{preview.review}</b></div>
                 </div>
+
                 {preview.committed
                   ? <div className="success">Imported {preview.committed.inserted} new transactions and verified {preview.committed.matched} existing records.</div>
-                  : <button className="primary" onClick={commit} disabled={busy}>Add {preview.new} new transactions</button>
+                  : <>
+                      <button className="primary" onClick={commit} disabled={busy}>
+                        {stage==='committing'?'Adding transactions…':`Add ${preview.new} new transactions`}
+                      </button>
+                      {stage==='committing'&&
+                        <div className="commit-status">
+                          <div className="upload-spinner small" aria-hidden="true"/>
+                          Saving transactions to your ledger…
+                        </div>
+                      }
+                    </>
                 }
               </>
           }
