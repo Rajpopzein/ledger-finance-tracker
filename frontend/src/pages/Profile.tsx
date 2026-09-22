@@ -78,6 +78,19 @@ export default function Profile(){
     }
   }
 
+  async function remove(linkId:number){
+    setBusy(true);setError('');setMsg('')
+    try{
+      await api.removeFamilyLink(linkId)
+      setMsg('Family link removed.')
+      await refreshFamily()
+    }catch(e:any){
+      setError(e.message||'Could not remove family link.')
+    }finally{
+      setBusy(false)
+    }
+  }
+
   if(!profile)return <div className="dashboard-state card">
     <div className="upload-spinner" aria-hidden="true"/>
     <div><b>Loading profile…</b><span>Fetching your Ledger identity.</span></div>
@@ -192,7 +205,8 @@ export default function Profile(){
 
       {linkedUsers.length
         ? linkedUsers.map(user=><div className="profile-person" key={user.id}>
-            <div><b>{user.name}</b><span>{user.handle}</span></div>
+            <div><b>{user.name}</b><span>{user.handle}{user.label?' • '+user.label:''}</span></div>
+            <button className="ghost" disabled={busy} onClick={()=>remove(user.link_id)}>Remove</button>
           </div>)
         : <div className="empty">No linked family members yet.</div>}
     </section>
