@@ -245,7 +245,7 @@ export default function Profile(){
           Send invite
         </Button>
 
-        {outgoing.length>0&&<Stack spacing=.75 sx={{mt:2}}>
+        {outgoing.length>0&&<Stack spacing={0.75} sx={{mt:2}}>
           <Typography variant="overline" color="text.secondary">PENDING SENT</Typography>
           {outgoing.map((item:any)=><Box
             key={item.link_id}
@@ -273,7 +273,7 @@ export default function Profile(){
           <Typography variant="h2">Invitations</Typography>
           <Chip size="small" label={incoming.length} color="primary"/>
         </Stack>
-        <Stack spacing=.75>
+        <Stack spacing={0.75}>
           {incoming.map((item:any)=><Box
             key={item.link_id}
             sx={{
@@ -293,7 +293,7 @@ export default function Profile(){
                 {item.user.handle+(item.label?' · '+item.label:'')}
               </Typography>
             </Box>
-            <Stack direction="row" spacing=.75>
+            <Stack direction="row" spacing={0.75}>
               <Button size="small" disabled={busy} onClick={()=>act(item.link_id,'reject')}>Reject</Button>
               <Button size="small" variant="contained" disabled={busy} onClick={()=>act(item.link_id,'accept')}>Accept</Button>
             </Stack>
@@ -306,7 +306,7 @@ export default function Profile(){
           <Typography variant="h2">Connected family</Typography>
           <Chip size="small" label={linkedUsers.length}/>
         </Stack>
-        <Stack spacing=.75>
+        <Stack spacing={0.75}>
           {linkedUsers.map(user=><Box
             key={user.id}
             sx={{
