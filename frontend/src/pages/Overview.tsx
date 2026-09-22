@@ -26,22 +26,22 @@ const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
 
 function MetricCard({label,value,sub,icon,mode}:{label:string;value:string;sub:string;icon:React.ReactNode;mode:'light'|'dark'}){
-  return <Paper sx={{...claySx(mode),p:2.1,minWidth:0}}>
+  return <Paper sx={{...claySx(mode),p:{xs:1.35,sm:1.8},minWidth:0}}>
     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
       <Box sx={{minWidth:0}}>
         <Typography variant="overline" color="text.secondary">{label}</Typography>
         <Typography sx={{fontSize:'clamp(1.35rem,3vw,2rem)',fontWeight:800,letterSpacing:'-.03em',overflowWrap:'anywhere'}}>{value}</Typography>
         <Typography variant="caption" color="text.secondary">{sub}</Typography>
       </Box>
-      <Box sx={{width:40,height:40,borderRadius:2.5,display:'grid',placeItems:'center',bgcolor:'action.selected',color:'primary.main',flex:'0 0 auto'}}>{icon}</Box>
+      <Box sx={{width:{xs:34,sm:40},height:{xs:34,sm:40},borderRadius:1.75,display:'grid',placeItems:'center',bgcolor:'action.selected',color:'primary.main',flex:'0 0 auto'}}>{icon}</Box>
     </Stack>
   </Paper>
 }
 
 function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
   const max=Math.max(1,...s.cashflow.flatMap(x=>[x.income,x.spent]))
-  return <Paper sx={{...claySx(mode),p:2.2,height:'100%'}}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:2}}>
+  return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2},height:'100%'}}>
+    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:{xs:1.25,sm:2}}}>
       <Box><Typography variant="overline" color="text.secondary">6 MONTHS</Typography><Typography variant="h2">Cash flow</Typography></Box>
       <Stack direction="row" spacing={1}>
         <Chip size="small" label="Income" color="primary" variant="outlined"/>
@@ -51,9 +51,9 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
     {s.cashflow.some((x)=>x.income||x.spent) ? (
       <Box
         sx={{
-          height:190,
+          height:{xs:165,sm:190},
           display:'grid',
-          gridTemplateColumns:`repeat(${s.cashflow.length}, minmax(28px, 1fr))`,
+          gridTemplateColumns:`repeat(${s.cashflow.length}, minmax(24px, 1fr))`,
           gap:1,
           alignItems:'end',
         }}
@@ -98,12 +98,12 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
 }
 
 function CategoryCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
-  return <Paper sx={{...claySx(mode),p:2.2,height:'100%'}}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:2}}>
+  return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2},height:'100%'}}>
+    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:{xs:1.25,sm:2}}}>
       <Typography variant="h2">Spending by category</Typography>
       <Typography fontWeight={800}>{money(s.spent)}</Typography>
     </Stack>
-    <Stack spacing={1.55}>
+    <Stack spacing={1.15}>
       {s.categories.slice(0,6).map(c=><Box key={c.name}>
         <Stack direction="row" justifyContent="space-between" spacing={2}>
           <Typography variant="body2" noWrap>{c.name}</Typography>
@@ -118,12 +118,12 @@ function CategoryCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
 
 function FamilyCard({s,periodLabel,mode}:{s:Summary;periodLabel:string;mode:'light'|'dark'}){
   const max=Math.max(1,...s.family_spending.map(x=>x.amount))
-  return <Paper sx={{...claySx(mode),p:2.2,height:'100%'}}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:2}}>
+  return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2},height:'100%'}}>
+    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:{xs:1.25,sm:2}}}>
       <Typography variant="h2">Spending by family</Typography>
       <Typography variant="caption" color="text.secondary">{periodLabel}</Typography>
     </Stack>
-    <Stack spacing={1.5}>
+    <Stack spacing={1.15}>
       {s.family_spending.map(member=><Box key={member.id}>
         <Stack direction="row" justifyContent="space-between" spacing={2}>
           <Box sx={{minWidth:0}}>
@@ -140,16 +140,16 @@ function FamilyCard({s,periodLabel,mode}:{s:Summary;periodLabel:string;mode:'lig
 }
 
 function RecentCard({tx,mode,onAll}:{tx:Tx[];mode:'light'|'dark';onAll:()=>void}){
-  return <Paper sx={{...claySx(mode),p:2.2,height:'100%'}}>
+  return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2},height:'100%'}}>
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:1.4}}>
       <Typography variant="h2">Recent transactions</Typography>
       <Button size="small" endIcon={<ArrowOutwardRoundedIcon/>} onClick={onAll}>View all</Button>
     </Stack>
     <Stack divider={<Box sx={{height:'1px',bgcolor:'divider'}}/>}>
-      {tx.map(t=><Stack key={t.id} direction="row" justifyContent="space-between" spacing={1.5} sx={{py:1.35,minWidth:0}}>
+      {tx.map(t=><Stack key={t.id} direction="row" justifyContent="space-between" spacing={1.15} sx={{py:{xs:1,sm:1.25},minWidth:0}}>
         <Box sx={{minWidth:0}}>
-          <Typography fontWeight={700} noWrap>{t.merchant||t.description||'Transaction'}</Typography>
-          <Typography variant="caption" color="text.secondary" noWrap>{t.category} · {t.account}</Typography>
+          <Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.merchant||t.description||'Transaction'}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{display:'block',mt:.15,overflowWrap:'anywhere'}}>{t.category} · {t.account}</Typography>
           <Stack direction="row" gap={0.6} sx={{mt:.6,flexWrap:'wrap'}}>
             {t.user&&<Chip size="small" label={`${t.user.name} · ${t.user.handle}`} variant="outlined"/>}
             {upiLabel(t)&&<Chip size="small" label={upiLabel(t)} color="primary" variant="outlined"/>}
@@ -197,10 +197,10 @@ export default function Overview(){
   useEffect(()=>{load()},[period.from,period.to,familyScope,familyUserId])
 
   if(loading)return <Box sx={{display:'grid',gap:2}}>
-    <Skeleton variant="rounded" height={190} sx={{borderRadius:4}}/>
+    <Skeleton variant="rounded" height={160} sx={{borderRadius:1.75}}/>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 1fr'},gap:2}}>
-      <Skeleton variant="rounded" height={260} sx={{borderRadius:4}}/>
-      <Skeleton variant="rounded" height={260} sx={{borderRadius:4}}/>
+      <Skeleton variant="rounded" height={220} sx={{borderRadius:1.75}}/>
+      <Skeleton variant="rounded" height={220} sx={{borderRadius:1.75}}/>
     </Box>
   </Box>
 
@@ -212,7 +212,7 @@ export default function Overview(){
 
   const hero=<Paper sx={{
     ...clay,
-    p:{xs:2.2,sm:3},
+    p:{xs:1.5,sm:2.4},
     overflow:'hidden',
     position:'relative',
     background:resolvedMode==='dark'
@@ -222,13 +222,13 @@ export default function Overview(){
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={2}>
       <Box>
         <Typography variant="overline" color="text.secondary">AVAILABLE · {scopeLabel.toUpperCase()}</Typography>
-        <Typography sx={{fontSize:'clamp(2.15rem,7vw,4.3rem)',fontWeight:850,letterSpacing:'-.055em',lineHeight:1.05}}>{money(s.available)}</Typography>
+        <Typography sx={{fontSize:'clamp(1.95rem,9vw,4rem)',fontWeight:850,letterSpacing:'-.055em',lineHeight:1.05}}>{money(s.available)}</Typography>
         <Typography color="text.secondary" sx={{mt:.8}}>Income − spent for {period.label}</Typography>
       </Box>
       <Button startIcon={<AddRoundedIcon/>} variant="contained" onClick={()=>setCash(true)} sx={{alignSelf:{xs:'stretch',sm:'flex-start'}}}>Add cash expense</Button>
     </Stack>
 
-    <Box sx={{mt:3}}>
+    <Box sx={{mt:{xs:2,sm:3}}}>
       <Stack direction="row" justifyContent="space-between" spacing={2}>
         <Typography variant="body2" fontWeight={700}>{pct}% verified</Typography>
         <Typography variant="caption" color="text.secondary">{s.verified} of {s.total} items</Typography>
@@ -237,7 +237,7 @@ export default function Overview(){
     </Box>
   </Paper>
 
-  const metrics=<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'repeat(3,1fr)'},gap:2}}>
+  const metrics=<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'repeat(3,1fr)'},gap:{xs:1.15,sm:2}}}>
     <MetricCard mode={resolvedMode} label="INCOME" value={money(s.income)} sub="Qualifying inflows" icon={<TrendingUpRoundedIcon/>}/>
     <MetricCard mode={resolvedMode} label="SPENT" value={money(s.spent)} sub="Transfers excluded" icon={<TrendingDownRoundedIcon/>}/>
     <MetricCard mode={resolvedMode} label="LEDGER ITEMS" value={String(s.total)} sub={s.needs_review?`${s.needs_review} need review`:'All clear'} icon={<AccountBalanceWalletRoundedIcon/>}/>
@@ -253,30 +253,30 @@ export default function Overview(){
   const balanced=<>
     {hero}
     {metrics}
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.15fr .85fr'},gap:2}}>{cards.flow}{cards.family}</Box>
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:2}}>{cards.recent}{cards.category}</Box>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.15fr .85fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{cards.family}</Box>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:{xs:1.15,sm:2}}}>{cards.recent}{cards.category}</Box>
   </>
 
   const focus=<>
     {hero}
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.35fr .65fr'},gap:2}}>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.35fr .65fr'},gap:{xs:1.15,sm:2}}}>
       {cards.recent}
-      <Stack spacing={2}>{metrics}{cards.category}</Stack>
+      <Stack spacing={{xs:1.15,sm:2}}>{metrics}{cards.category}</Stack>
     </Box>
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.25fr .75fr'},gap:2}}>{cards.flow}{cards.family}</Box>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.25fr .75fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{cards.family}</Box>
   </>
 
   const insights=<>
     {metrics}
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.4fr .6fr'},gap:2}}>{cards.flow}{hero}</Box>
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 1fr 1fr'},gap:2}}>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.4fr .6fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{hero}</Box>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 1fr 1fr'},gap:{xs:1.15,sm:2}}}>
       {cards.category}
       {cards.family}
       {cards.recent}
     </Box>
   </>
 
-  return <Stack spacing={2.2}>
+  return <Stack spacing={{xs:1.4,sm:2}}>
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'flex-start',sm:'flex-end'}} spacing={1}>
       <Box>
         <Typography variant="overline" color="text.secondary">{period.label.toUpperCase()} · {scopeLabel.toUpperCase()}</Typography>
