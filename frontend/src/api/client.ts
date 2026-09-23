@@ -93,7 +93,12 @@ export const api={
  shortcutStatus:()=>req<any>('/shortcuts/status'),
  shortcutCreateToken:()=>req<any>('/shortcuts/token',{method:'POST'}),
  shortcutRevokeToken:()=>req<any>('/shortcuts/token',{method:'DELETE'}),
- investments:()=>req<any>('/investments'),
+ investments:(familyScope='self',familyMemberId?:number)=>{
+   const p=new URLSearchParams()
+   p.set('family_scope',familyScope)
+   if(familyMemberId)p.set('family_user_id',String(familyMemberId))
+   return req<any>(`/investments?${p.toString()}`)
+ },
  createInvestment:(body:any)=>req<any>('/investments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateInvestment:(id:number,body:any)=>req<any>(`/investments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  deleteInvestment:(id:number)=>req<any>(`/investments/${id}`,{method:'DELETE'}),
@@ -111,7 +116,12 @@ export const api={
    if(password)f.append('password',password)
    return req<any>('/investments/import/commit',{method:'POST',body:f})
  },
- debts:()=>req<any>('/debts'),
+ debts:(familyScope='self',familyMemberId?:number)=>{
+   const p=new URLSearchParams()
+   p.set('family_scope',familyScope)
+   if(familyMemberId)p.set('family_user_id',String(familyMemberId))
+   return req<any>(`/debts?${p.toString()}`)
+ },
  createDebt:(body:any)=>req<any>('/debts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateDebt:(debtId:number,body:any)=>req<any>(`/debts/${debtId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  deleteDebt:(debtId:number)=>req<any>(`/debts/${debtId}`,{method:'DELETE'}),
