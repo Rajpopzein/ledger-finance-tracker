@@ -1,4 +1,5 @@
-const API=import.meta.env.VITE_API_URL || '/api'
+const IS_NATIVE_APP=Boolean(import.meta.env.TAURI_ENV_PLATFORM)
+const API=import.meta.env.VITE_API_URL || (IS_NATIVE_APP?'https://ledger-finance-raj-api.onrender.com/api':'/api')
 
 const SESSION_KEY='ledger_session_token'
 
