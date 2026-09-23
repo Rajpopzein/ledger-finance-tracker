@@ -2,7 +2,13 @@ import {createContext,useContext,useEffect,useMemo,useState} from 'react'
 import type {ReactNode} from 'react'
 import {api} from './api/client'
 
-export type FamilySharing={transactions:boolean;debts:boolean;investments:boolean}
+export type FamilySharing={
+  transactions:boolean
+  debts:boolean
+  investments:boolean
+  ai_insights:boolean
+  ai_categorization:boolean
+}
 export type LinkedUser={
   id:number
   email?:string
@@ -44,8 +50,8 @@ export function FamilyProvider({children}:{children:ReactNode}){
         ...x.user,
         link_id:x.link_id,
         label:x.label||null,
-        sharing:x.sharing||{transactions:true,debts:true,investments:true},
-        shared_with_me:x.shared_with_me||{transactions:true,debts:true,investments:true},
+        sharing:x.sharing||{transactions:true,debts:true,investments:true,ai_insights:false,ai_categorization:false},
+        shared_with_me:x.shared_with_me||{transactions:true,debts:true,investments:true,ai_insights:false,ai_categorization:false},
       }))
       setLinkedUsers(users)
       setIncoming(network.incoming||[])
