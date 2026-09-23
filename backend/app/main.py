@@ -253,6 +253,39 @@ def _serialize_ai_settings(s:AISetting|None):
         "status":"configured" if s.provider and s.model else "not_configured",
     }
 
+def _serialize_ai_capabilities(db:Session,user_id:int):
+    providers=[]
+    own=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
+    if own and own.provider and own.model:
+        providers.append({
+            "user_id":user_id,
+            "name":"You",
+            "provider":own.provider,
+            "model":own.model,
+            "own":True,
+            "ai_insights":True,
+            "ai_categorization":True,
+        })
+    insights=set(shared_linked_user_ids(db,user_id,"ai_insights"))
+    categorization=set(shared_linked_user_ids(db,user_id,"ai_categorization"))
+    for other_id in linked_user_ids(db,user_id):
+        if other_id not in insights and other_id not in categorization:
+            continue
+        setting=db.scalar(select(AISetting).where(AISetting.user_id==other_id))
+        if not setting or not setting.provider or not setting.model:
+            continue
+        other=db.get(User,other_id)
+        providers.append({
+            "user_id":other_id,
+            "name":other.name if other else "Family member",
+            "provider":setting.provider,
+            "model":setting.model,
+            "own":False,
+            "ai_insights":other_id in insights,
+            "ai_categorization":other_id in categorization,
+        })
+    return {"providers":providers}
+
 @app.get("/api/categories")
 def categories(request:Request, db:Session=Depends(get_db)):
     user_id=current_user_id(request)
@@ -274,6 +307,7 @@ def bootstrap(request:Request, db:Session=Depends(get_db)):
         "accounts":_serialize_accounts(account_rows),
         "categories":_serialize_categories(db,user_id),
         "ai_settings":_serialize_ai_settings(ai_setting),
+        "ai_capabilities":_serialize_ai_capabilities(db,user_id),
         "preferences":{
             "theme_mode":user.theme_mode or "dark",
             "dashboard_template":user.dashboard_template or "balanced",
@@ -856,38 +890,7 @@ def _ai_history_item(row:AIConversation, include_response:bool=False):
 
 @app.get("/api/ai/capabilities")
 def ai_capabilities(request:Request, db:Session=Depends(get_db)):
-    user_id=current_user_id(request)
-    providers=[]
-    own=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
-    if own and own.provider and own.model:
-        providers.append({
-            "user_id":user_id,
-            "name":"You",
-            "provider":own.provider,
-            "model":own.model,
-            "own":True,
-            "ai_insights":True,
-            "ai_categorization":True,
-        })
-    insights=set(shared_linked_user_ids(db,user_id,"ai_insights"))
-    categorization=set(shared_linked_user_ids(db,user_id,"ai_categorization"))
-    for other_id in linked_user_ids(db,user_id):
-        if other_id not in insights and other_id not in categorization:
-            continue
-        setting=db.scalar(select(AISetting).where(AISetting.user_id==other_id))
-        if not setting or not setting.provider or not setting.model:
-            continue
-        other=db.get(User,other_id)
-        providers.append({
-            "user_id":other_id,
-            "name":other.name if other else "Family member",
-            "provider":setting.provider,
-            "model":setting.model,
-            "own":False,
-            "ai_insights":other_id in insights,
-            "ai_categorization":other_id in categorization,
-        })
-    return {"providers":providers}
+    return _serialize_ai_capabilities(db,current_user_id(request))
 
 @app.get("/api/ai/history")
 def ai_history(request:Request, limit:int=40, db:Session=Depends(get_db)):
