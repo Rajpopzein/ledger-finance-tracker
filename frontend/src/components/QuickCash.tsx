@@ -16,6 +16,7 @@ import {
   ToggleButtonGroup,
 } from '@mui/material'
 import {api} from '../api/client'
+import {useAppData} from '../appData'
 
 const defaults=['Food & Dining','Fuel','Groceries','EMI & Loans','Shopping','Bills & Subscriptions','Travel','Health','Payroll','Investments','Other']
 
@@ -36,16 +37,14 @@ export default function QuickCash({
   onClose:()=>void
   onSaved:()=>void|Promise<void>
 }){
-  const [cats,setCats]=useState<any[]>([])
+  const {categories}=useAppData()
+  const cats=categories.length?categories:defaults.map(name=>({name}))
   const [form,setForm]=useState(initialForm)
   const [saving,setSaving]=useState(false)
   const [error,setError]=useState('')
 
   useEffect(()=>{
-    if(open){
-      setError('')
-      api.categories().then(x=>setCats(x.length?x:defaults.map(name=>({name}))))
-    }
+    if(open)setError('')
   },[open])
 
   function setDirection(direction:'credit'|'debit'){
