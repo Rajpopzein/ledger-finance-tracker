@@ -17,6 +17,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
@@ -30,6 +31,7 @@ import {usePeriod} from '../period'
 import {useFamily} from '../family'
 import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
+import QuickCash from '../components/QuickCash'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
@@ -63,6 +65,7 @@ export default function Transactions(){
   const [busy,setBusy]=useState('')
   const [notice,setNotice]=useState('')
   const [error,setError]=useState('')
+  const [addOpen,setAddOpen]=useState(false)
 
   const canManage=familyScope==='self'&&!familyUserId
   const categorizationProviders=(aiCapabilities?.providers||[]).filter((provider:any)=>provider.ai_categorization)
@@ -205,13 +208,23 @@ export default function Transactions(){
   const bankAccounts=accounts.filter(a=>a.type==='bank')
 
   return <Stack spacing={{xs:1.4,sm:2}}>
-    <Box>
-      <Typography variant="overline" color="text.secondary">{scopeLabel.toUpperCase()}</Typography>
-      <Typography variant="h1">Transactions</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
-        {data.total.toLocaleString('en-IN')} transactions match the current filters.
-      </Typography>
-    </Box>
+    <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'flex-start',sm:'center'}} spacing={1}>
+      <Box>
+        <Typography variant="overline" color="text.secondary">{scopeLabel.toUpperCase()}</Typography>
+        <Typography variant="h1">Transactions</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
+          {data.total.toLocaleString('en-IN')} transactions match the current filters.
+        </Typography>
+      </Box>
+      {canManage&&<Button
+        variant="contained"
+        startIcon={<AddRoundedIcon/>}
+        onClick={()=>setAddOpen(true)}
+        sx={{alignSelf:{xs:'stretch',sm:'auto'}}}
+      >
+        Add transaction
+      </Button>}
+    </Stack>
 
     <Paper sx={{...clay,p:{xs:1.15,sm:1.5}}}>
       <Box sx={{
@@ -429,5 +442,17 @@ export default function Transactions(){
         </FormControl>
       </Stack>}
     </Paper>}
+
+    <QuickCash
+      open={addOpen}
+      onClose={()=>setAddOpen(false)}
+      onSaved={async()=>{
+        if(page===1){
+          await load()
+        }else{
+          setPage(1)
+        }
+      }}
+    />
   </Stack>
 }
