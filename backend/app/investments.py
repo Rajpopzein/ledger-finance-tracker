@@ -24,18 +24,18 @@ ALIASES = {
         "stock symbol","instrument name","security name","company","company name",
     },
     "name": {"name","company","company name","security name","instrument name"},
-    "isin": {"isin","isin code"},
+    "isin": {"isin","isin code","symbol isin"},
     "quantity": {"quantity","qty","qty.","net qty","net quantity","holding quantity","holdings qty"},
     "average_price": {
         "average price","avg price","avg. price","avg cost","avg. cost","average cost",
-        "buy average","buy avg","avg buying price",
+        "buy average","buy avg","avg buying price","average buy price","average buying price",
     },
     "invested_amount": {
         "invested amount","invested value","investment","cost value","cost","buy value",
         "total investment","invested",
     },
     "current_price": {
-        "current price","ltp","last traded price","market price","last price","cmp",
+        "current price","ltp","last traded price","market price","last price","cmp","closing price","close price",
     },
     "current_value": {
         "current value","cur val","cur. val","market value","value","holding value",
