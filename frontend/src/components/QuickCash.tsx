@@ -12,13 +12,16 @@ import {
   Select,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
 import {api} from '../api/client'
 
-const defaults=['Food & Dining','Fuel','Groceries','EMI & Loans','Shopping','Bills & Subscriptions','Travel','Health','Other']
+const defaults=['Food & Dining','Fuel','Groceries','EMI & Loans','Shopping','Bills & Subscriptions','Travel','Health','Payroll','Investments','Other']
 
 const initialForm=()=>({
   amount:'',
+  direction:'debit' as 'credit'|'debit',
   category:'Food & Dining',
   txn_at:new Date().toISOString().slice(0,16),
   note:''
@@ -45,6 +48,16 @@ export default function QuickCash({
     }
   },[open])
 
+  function setDirection(direction:'credit'|'debit'){
+    setForm(current=>({
+      ...current,
+      direction,
+      category:direction==='credit'
+        ? (current.category==='Food & Dining'?'Payroll':current.category)
+        : (current.category==='Payroll'?'Food & Dining':current.category),
+    }))
+  }
+
   async function save(){
     if(saving||!form.amount)return
     setSaving(true)
@@ -59,11 +72,13 @@ export default function QuickCash({
       setForm(initialForm())
       onClose()
     }catch(e:any){
-      setError(e.message||'Could not save this cash expense.')
+      setError(e.message||'Could not save this cash transaction.')
     }finally{
       setSaving(false)
     }
   }
+
+  const isIncome=form.direction==='credit'
 
   return <Dialog
     open={open}
@@ -72,9 +87,21 @@ export default function QuickCash({
     maxWidth="xs"
     PaperProps={{sx:{borderRadius:4}}}
   >
-    <DialogTitle>Add cash expense</DialogTitle>
+    <DialogTitle>Add cash transaction</DialogTitle>
     <DialogContent>
       <Stack spacing={1.6} sx={{pt:.5}}>
+        <ToggleButtonGroup
+          exclusive
+          fullWidth
+          size="small"
+          value={form.direction}
+          disabled={saving}
+          onChange={(_,value:'credit'|'debit'|null)=>{if(value)setDirection(value)}}
+        >
+          <ToggleButton value="credit">Money in · Income</ToggleButton>
+          <ToggleButton value="debit">Money out · Expense</ToggleButton>
+        </ToggleButtonGroup>
+
         <TextField
           label="Amount"
           type="number"
@@ -119,7 +146,7 @@ export default function QuickCash({
     <DialogActions sx={{p:2}}>
       <Button onClick={onClose} disabled={saving}>Cancel</Button>
       <Button variant="contained" onClick={save} disabled={!form.amount||saving}>
-        {saving?'Saving…':'Save expense'}
+        {saving?'Saving…':isIncome?'Save income':'Save expense'}
       </Button>
     </DialogActions>
   </Dialog>
