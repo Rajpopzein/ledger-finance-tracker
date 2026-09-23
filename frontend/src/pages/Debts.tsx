@@ -29,6 +29,8 @@ import PaidRoundedIcon from '@mui/icons-material/PaidRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import type {Debt,DebtList} from '../types'
 import {api} from '../api/client'
+import {useFamily} from '../family'
+import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n)
@@ -50,8 +52,11 @@ const emptyForm=()=>({
 
 export default function Debts(){
   const {resolvedMode}=useUI()
+  const {familyScope,familyUserId,scopeLabel,linkedUsers}=useFamily()
+  const {auth}=useAppData()
   const navigate=useNavigate()
   const clay=claySx(resolvedMode)
+  const canManage=familyScope==='self'&&!familyUserId
   const [data,setData]=useState<DebtList>({
     items:[],
     total_outstanding:0,
@@ -72,11 +77,24 @@ export default function Debts(){
   const [notice,setNotice]=useState('')
 
   async function load(){
-    try{setData(await api.debts())}
-    catch(e:any){setError(e.message||'Could not load liabilities.')}
+    setError('')
+    try{setData(await api.debts(familyScope,familyUserId))}
+    catch(e:any){
+      setData({
+        items:[],
+        total_outstanding:0,
+        loan_outstanding:0,
+        credit_card_outstanding:0,
+        monthly_emi:0,
+        monthly_loan_emi:0,
+        monthly_card_minimum_due:0,
+        active_count:0,
+      })
+      setError(e.message||'Could not load liabilities.')
+    }
   }
 
-  useEffect(()=>{load()},[])
+  useEffect(()=>{load()},[familyScope,familyUserId])
 
   async function createDebt(){
     if(!form.lender.trim()||!form.outstanding_balance)return
@@ -203,6 +221,10 @@ export default function Debts(){
 
   const active=useMemo(()=>data.items.filter(d=>d.status==='active'),[data.items])
   const closed=useMemo(()=>data.items.filter(d=>d.status!=='active'),[data.items])
+  const ownerName=(userId?:number)=>{
+    if(userId===auth?.user_id)return 'You'
+    return linkedUsers.find(user=>user.id===userId)?.name||'Family'
+  }
 
   function liabilityFields(
     values:ReturnType<typeof emptyForm>,
@@ -287,17 +309,18 @@ export default function Debts(){
 
   function liabilityTable(rows:Debt[],activeRows:boolean){
     return <TableContainer component={Paper} sx={{...clay,overflowX:'auto'}}>
-      <Table size="small" sx={{minWidth:activeRows?1120:760}}>
+      <Table size="small" sx={{minWidth:canManage?(activeRows?1120:760):860}}>
         <TableHead>
           <TableRow>
             <TableCell sx={{fontWeight:800}}>Liability</TableCell>
+            {!canManage&&<TableCell sx={{fontWeight:800}}>Owner</TableCell>}
             <TableCell sx={{fontWeight:800}}>Type</TableCell>
             <TableCell sx={{fontWeight:800}} align="right">Outstanding</TableCell>
             <TableCell sx={{fontWeight:800}} align="right">Rate / APR</TableCell>
             <TableCell sx={{fontWeight:800}} align="right">EMI / Min due</TableCell>
             <TableCell sx={{fontWeight:800}}>Next due</TableCell>
-            {activeRows&&<TableCell sx={{fontWeight:800,minWidth:210}}>Record payment</TableCell>}
-            <TableCell sx={{fontWeight:800,minWidth:190}}>Actions</TableCell>
+            {activeRows&&canManage&&<TableCell sx={{fontWeight:800,minWidth:210}}>Record payment</TableCell>}
+            {canManage&&<TableCell sx={{fontWeight:800,minWidth:190}}>Actions</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -312,6 +335,9 @@ export default function Debts(){
                   {recentPayment?` · last payment ${money(recentPayment.amount)}`:''}
                 </Typography>
               </TableCell>
+              {!canManage&&<TableCell>
+                <Typography variant="body2" fontWeight={700}>{ownerName(debt.user_id)}</Typography>
+              </TableCell>}
               <TableCell>
                 <Chip size="small" variant="outlined" label={isCard?'Credit card':'Loan'}/>
               </TableCell>
@@ -321,7 +347,7 @@ export default function Debts(){
               <TableCell align="right">{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</TableCell>
               <TableCell align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
               <TableCell>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
-              {activeRows&&<TableCell>
+              {activeRows&&canManage&&<TableCell>
                 <Stack direction="row" spacing={0.75} alignItems="center">
                   <TextField
                     size="small"
@@ -343,7 +369,7 @@ export default function Debts(){
                   </Button>
                 </Stack>
               </TableCell>}
-              <TableCell>
+              {canManage&&<TableCell>
                 <Stack direction="row" spacing={0.5}>
                   <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(debt)}>Edit</Button>
                   {activeRows&&<Button size="small" disabled={busy==='close:'+debt.id} onClick={()=>closeDebt(debt)}>Close</Button>}
@@ -357,11 +383,11 @@ export default function Debts(){
                     Delete
                   </Button>
                 </Stack>
-              </TableCell>
+              </TableCell>}
             </TableRow>
           })}
           {!rows.length&&<TableRow>
-            <TableCell colSpan={activeRows?8:7}>
+            <TableCell colSpan={canManage?(activeRows?8:7):7}>
               <Typography variant="body2" color="text.secondary" sx={{py:2,textAlign:'center'}}>
                 {activeRows?'No active liabilities yet.':'No closed or paused liabilities.'}
               </Typography>
@@ -381,13 +407,13 @@ export default function Debts(){
           Track loans and credit-card outstanding in one place. Loan-document imports are under Import → Debt.
         </Typography>
       </Box>
-      <Button
+      {canManage&&<Button
         variant="contained"
         startIcon={<AddRoundedIcon/>}
         onClick={()=>{setForm(emptyForm());setAddOpen(true);setError('');setNotice('')}}
       >
         Add liability
-      </Button>
+      </Button>}
     </Stack>
 
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',lg:'repeat(4,1fr)'},gap:1}}>
@@ -402,6 +428,9 @@ export default function Debts(){
       </Paper>)}
     </Box>
 
+    {!canManage&&<Alert severity="info">
+      Viewing {scopeLabel} liabilities in read-only mode. Only liabilities explicitly shared with you are returned.
+    </Alert>}
     {error&&<Alert severity="error">{error}</Alert>}
     {notice&&<Alert severity="success">{notice}</Alert>}
 
