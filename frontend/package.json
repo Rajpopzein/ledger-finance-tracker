@@ -7,7 +7,13 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "app:android:init": "tauri android init --ci",
+    "app:android:dev": "tauri android dev",
+    "app:android:build": "tauri android build --apk"
   },
   "dependencies": {
     "react": "18.2.0",
@@ -23,6 +29,7 @@
     "@types/react-dom": "18.2.25",
     "@vitejs/plugin-react": "5.0.4",
     "typescript": "5.9.2",
-    "vite": "7.1.7"
+    "vite": "7.1.7",
+    "@tauri-apps/cli": "2.11.5"
   }
 }
