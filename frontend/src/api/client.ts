@@ -86,9 +86,26 @@ export const api={
  },
  aiCategorize:(transactionIds:number[])=>req<any>('/transactions/ai-categorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transaction_ids:transactionIds})}),
  undoCategory:(txId:number)=>req<any>(`/transactions/${txId}/category/undo`,{method:'POST'}),
+ setTransactionCategory:(txId:number,category:string)=>req<any>(`/transactions/${txId}/category`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({category})}),
  shortcutStatus:()=>req<any>('/shortcuts/status'),
  shortcutCreateToken:()=>req<any>('/shortcuts/token',{method:'POST'}),
  shortcutRevokeToken:()=>req<any>('/shortcuts/token',{method:'DELETE'}),
+ investments:()=>req<any>('/investments'),
+ createInvestment:(body:any)=>req<any>('/investments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ updateInvestment:(id:number,body:any)=>req<any>(`/investments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ deleteInvestment:(id:number)=>req<any>(`/investments/${id}`,{method:'DELETE'}),
+ investmentPreview:(platform:string,file:File)=>{
+   const f=new FormData()
+   f.append('platform',platform)
+   f.append('file',file)
+   return req<any>('/investments/import/preview',{method:'POST',body:f})
+ },
+ investmentCommit:(platform:string,file:File)=>{
+   const f=new FormData()
+   f.append('platform',platform)
+   f.append('file',file)
+   return req<any>('/investments/import/commit',{method:'POST',body:f})
+ },
  debts:()=>req<any>('/debts'),
  createDebt:(body:any)=>req<any>('/debts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateDebt:(debtId:number,body:any)=>req<any>(`/debts/${debtId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
