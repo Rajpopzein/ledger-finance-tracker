@@ -11,6 +11,7 @@ import AIInsights from './pages/AIInsights'
 import Profile from './pages/Profile'
 import Auth from './pages/Auth'
 import {api} from './api/client'
+import {AppDataProvider} from './appData'
 
 export default function App(){
   const [auth,setAuth]=useState<any|null>(null)
@@ -26,16 +27,18 @@ export default function App(){
   </Box>
   if(!auth.authenticated)return <Auth setupRequired={!!auth.setup_required} onAuthenticated={refreshAuth}/>
 
-  return <Routes>
-    <Route element={<Layout/>}>
-      <Route path="/" element={<Overview/>}/>
-      <Route path="/transactions" element={<Transactions/>}/>
-      <Route path="/debts" element={<Debts/>}/>
-      <Route path="/investments" element={<Investments/>}/>
-      <Route path="/import" element={<ImportReview/>}/>
-      <Route path="/ai" element={<AIInsights/>}/>
-      <Route path="/profile" element={<Profile/>}/>
-      <Route path="/settings" element={<Navigate to="/profile?tab=settings" replace/>}/>
-    </Route>
-  </Routes>
+  return <AppDataProvider auth={auth}>
+    <Routes>
+      <Route element={<Layout/>}>
+        <Route path="/" element={<Overview/>}/>
+        <Route path="/transactions" element={<Transactions/>}/>
+        <Route path="/debts" element={<Debts/>}/>
+        <Route path="/investments" element={<Investments/>}/>
+        <Route path="/import" element={<ImportReview/>}/>
+        <Route path="/ai" element={<AIInsights/>}/>
+        <Route path="/profile" element={<Profile/>}/>
+        <Route path="/settings" element={<Navigate to="/profile?tab=settings" replace/>}/>
+      </Route>
+    </Routes>
+  </AppDataProvider>
 }
