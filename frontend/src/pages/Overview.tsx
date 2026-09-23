@@ -234,7 +234,7 @@ export default function Overview(){
         <Typography sx={{fontSize:'clamp(1.95rem,9vw,4rem)',fontWeight:850,letterSpacing:'-.055em',lineHeight:1.05}}>{money(s.available)}</Typography>
         <Typography color="text.secondary" sx={{mt:.8}}>Income − spent for {period.label}</Typography>
       </Box>
-      <Button startIcon={<AddRoundedIcon/>} variant="contained" onClick={()=>setCash(true)} sx={{alignSelf:{xs:'stretch',sm:'flex-start'}}}>Add cash transaction</Button>
+      <Button startIcon={<AddRoundedIcon/>} variant="contained" onClick={()=>setCash(true)} sx={{alignSelf:{xs:'stretch',sm:'flex-start'}}}>Add transaction</Button>
     </Stack>
 
     <Box sx={{mt:{xs:2,sm:3}}}>
