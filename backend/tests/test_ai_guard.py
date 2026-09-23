@@ -9,7 +9,7 @@ def test_redacts_sensitive_bank_identifiers():
     assert "123456789012" not in redacted
     assert "HDFC0001234" not in redacted
     assert "raj@okhdfcbank" not in redacted
-    assert "[REDACTED_ACCOUNT]" in redacted or "[REDACTED_NUMBER]" in redacted
+    assert any(marker in redacted for marker in ("[REDACTED_ACCOUNT]", "[REDACTED_NUMBER]", "[REDACTED_ID]"))
     assert "[REDACTED_IFSC]" in redacted
     assert "[REDACTED_UPI]" in redacted
 

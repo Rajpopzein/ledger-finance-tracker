@@ -129,7 +129,7 @@ export default function Profile(){
 
   async function updateSharing(
     user:any,
-    key:'transactions'|'debts'|'investments',
+    key:'transactions'|'debts'|'investments'|'ai_insights'|'ai_categorization',
     value:boolean,
   ){
     const next={...user.sharing,[key]:value}
@@ -345,6 +345,8 @@ export default function Profile(){
               user.shared_with_me.transactions&&'Transactions',
               user.shared_with_me.debts&&'Debts & cards',
               user.shared_with_me.investments&&'Investments',
+              user.shared_with_me.ai_insights&&'AI Insights',
+              user.shared_with_me.ai_categorization&&'AI Categorization',
             ].filter(Boolean) as string[]
             return <Box
               key={user.id}
@@ -406,6 +408,31 @@ export default function Profile(){
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
                     These permissions control family-scoped dashboard totals and shared transaction visibility.
+                  </Typography>
+
+                  <Typography variant="overline" color="text.secondary" sx={{display:'block',mt:1.25}}>AI ACCESS</Typography>
+                  <Stack direction={{xs:'column',sm:'row'}} spacing={{xs:0,sm:1.5}} sx={{mt:.25,flexWrap:'wrap'}}>
+                    <FormControlLabel
+                      control={<Switch
+                        size="small"
+                        checked={!!user.sharing.ai_insights}
+                        disabled={sharingBusy===user.link_id}
+                        onChange={e=>updateSharing(user,'ai_insights',e.target.checked)}
+                      />}
+                      label="AI Insights"
+                    />
+                    <FormControlLabel
+                      control={<Switch
+                        size="small"
+                        checked={!!user.sharing.ai_categorization}
+                        disabled={sharingBusy===user.link_id}
+                        onChange={e=>updateSharing(user,'ai_categorization',e.target.checked)}
+                      />}
+                      label="AI Categorization"
+                    />
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    AI access shares capability only. Provider credentials and AI history stay private.
                   </Typography>
                 </Box>
 

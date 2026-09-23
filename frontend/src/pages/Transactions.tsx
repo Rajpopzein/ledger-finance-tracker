@@ -43,7 +43,7 @@ export default function Transactions(){
   const {period}=usePeriod()
   const {familyScope,familyUserId,scopeLabel}=useFamily()
   const {resolvedMode}=useUI()
-  const {accounts,categories}=useAppData()
+  const {accounts,categories,aiCapabilities}=useAppData()
 
   const [q,setQ]=useState('')
   const [fromDate,setFromDate]=useState(period.from||'')
@@ -63,7 +63,8 @@ export default function Transactions(){
   const [error,setError]=useState('')
 
   const canManage=familyScope==='self'&&!familyUserId
-  const canCategorize=canManage
+  const categorizationProviders=(aiCapabilities?.providers||[]).filter((provider:any)=>provider.ai_categorization)
+  const canCategorize=canManage&&categorizationProviders.length>0
 
   useEffect(()=>{
     setFromDate(period.from||'')
@@ -249,9 +250,17 @@ export default function Transactions(){
         <Typography variant="caption" color="text.secondary">
           Income includes incoming credits except internal/self transfers. Account numbers and IFSC codes are not shown here or sent to AI.
         </Typography>
-        <Button size="small" variant="outlined" startIcon={<AutoAwesomeRoundedIcon/>} onClick={categorizePage} disabled={!canCategorize||aiBusy||!data.items.length}>
-          {aiBusy?'Categorizing…':'AI categorize page'}
-        </Button>
+        <Stack alignItems={{xs:'stretch',sm:'flex-end'}} spacing={.35}>
+          <Button size="small" variant="outlined" startIcon={<AutoAwesomeRoundedIcon/>} onClick={categorizePage} disabled={!canCategorize||aiBusy||!data.items.length}>
+            {aiBusy?'Categorizing…':'AI categorize page'}
+          </Button>
+          {canManage&&!categorizationProviders.length&&<Typography variant="caption" color="text.secondary">
+            Configure AI or ask a family member to share AI Categorization.
+          </Typography>}
+          {canManage&&categorizationProviders.length>0&&!categorizationProviders.some((provider:any)=>provider.own)&&<Typography variant="caption" color="text.secondary">
+            Using family-shared AI capability for your transactions only.
+          </Typography>}
+        </Stack>
       </Stack>
     </Paper>
 

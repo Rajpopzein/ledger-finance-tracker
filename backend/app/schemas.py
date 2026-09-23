@@ -28,6 +28,8 @@ class FamilySharingUpdate(BaseModel):
     transactions: bool
     debts: bool
     investments: bool
+    ai_insights: bool = False
+    ai_categorization: bool = False
 
 class OwnerLogin(BaseModel):
     email: EmailStr
@@ -64,10 +66,14 @@ class AIQuestion(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     from_date: date | None = None
     to_date: date | None = None
+    family_scope: str = Field(default="self", pattern="^(self|family|all)$")
+    family_user_id: int | None = None
+    provider_user_id: int | None = None
 
 
 class AICategorizeRequest(BaseModel):
     transaction_ids: list[int] = Field(min_length=1, max_length=100)
+    provider_user_id: int | None = None
 
 class DebtCreate(BaseModel):
     lender: str = Field(min_length=1, max_length=160)
