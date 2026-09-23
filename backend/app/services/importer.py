@@ -4,6 +4,8 @@ from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
 import xlrd
 
+from .excel_security import unlock_excel
+
 DATE_KEYS = ["date", "transaction date", "txn date", "value date", "value dt", "transaction dt", "txn dt"]
 DESC_KEYS = ["description", "narration", "details", "transaction remarks", "remarks", "particulars", "transaction details"]
 DEBIT_KEYS = [
@@ -312,8 +314,11 @@ def normalize_rows(rows):
 
     return out
 
-def parse_statement(name: str, content: bytes):
+def parse_statement(name: str, content: bytes, password: str | None = None):
     lower = name.lower()
+
+    if lower.endswith((".xlsx", ".xls")):
+        content = unlock_excel(name, content, password)
 
     if lower.endswith(".csv"):
         text = content.decode("utf-8-sig", errors="replace")
