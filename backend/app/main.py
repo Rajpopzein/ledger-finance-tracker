@@ -203,7 +203,7 @@ def accounts(request:Request, db:Session=Depends(get_db)):
         .where(Account.user_id==user_id, Account.is_active==True)
         .order_by(Account.id)
     ).all()
-    return [{"id":a.id,"name":a.name,"institution":a.institution,"mask":a.account_mask,"type":a.type} for a in rows]
+    return _serialize_accounts(rows)
 
 @app.post("/api/accounts")
 def create_account(body:AccountCreate, request:Request, db:Session=Depends(get_db)):
@@ -225,13 +225,60 @@ def create_account(body:AccountCreate, request:Request, db:Session=Depends(get_d
 
 DEFAULT_CATEGORIES=["Food & Dining","Fuel","Groceries","EMI & Loans","Shopping","Bills & Subscriptions","Travel","Health","Payroll","Investments","Other"]
 
-@app.get("/api/categories")
-def categories(request:Request, db:Session=Depends(get_db)):
-    user_id=current_user_id(request)
+def _serialize_accounts(rows):
+    return [{"id":a.id,"name":a.name,"institution":a.institution,"mask":a.account_mask,"type":a.type} for a in rows]
+
+def _serialize_categories(db:Session,user_id:int):
     existing={c.name:c.id for c in db.scalars(
         select(Category).where(Category.user_id==user_id).order_by(Category.name)
     ).all()}
     return [{"id":existing.get(name),"name":name} for name in DEFAULT_CATEGORIES] + [{"id":cid,"name":name} for name,cid in existing.items() if name not in DEFAULT_CATEGORIES]
+
+def _serialize_ai_settings(s:AISetting|None):
+    if not s:
+        return {"provider":None,"status":"not_configured"}
+    return {
+        "provider":s.provider,
+        "base_url":s.base_url,
+        "model":s.model,
+        "context_limit":s.context_limit,
+        "temperature":float(s.temperature),
+        "allow_amounts":s.allow_amounts,
+        "allow_merchants":s.allow_merchants,
+        "allow_categories":s.allow_categories,
+        "allow_dates":s.allow_dates,
+        "allow_balances":s.allow_balances,
+        "allow_notes":s.allow_notes,
+        "has_api_key":bool(s.api_key_encrypted),
+        "status":"configured" if s.provider and s.model else "not_configured",
+    }
+
+@app.get("/api/categories")
+def categories(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    return _serialize_categories(db,user_id)
+
+@app.get("/api/bootstrap")
+def bootstrap(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    user=db.get(User,user_id)
+    if not user:
+        raise HTTPException(404,"User not found")
+    account_rows=db.scalars(
+        select(Account)
+        .where(Account.user_id==user_id,Account.is_active==True)
+        .order_by(Account.id)
+    ).all()
+    ai_setting=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
+    return {
+        "accounts":_serialize_accounts(account_rows),
+        "categories":_serialize_categories(db,user_id),
+        "ai_settings":_serialize_ai_settings(ai_setting),
+        "preferences":{
+            "theme_mode":user.theme_mode or "dark",
+            "dashboard_template":user.dashboard_template or "balanced",
+        },
+    }
 
 INDIA_TZ = timezone(timedelta(hours=5, minutes=30))
 
@@ -776,8 +823,7 @@ def commit(token:str, request:Request, db:Session=Depends(get_db)):
 def get_ai_settings(request:Request, db:Session=Depends(get_db)):
     user_id=current_user_id(request)
     s=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
-    if not s: return {"provider":None,"status":"not_configured"}
-    return {"provider":s.provider,"base_url":s.base_url,"model":s.model,"context_limit":s.context_limit,"temperature":float(s.temperature),"allow_amounts":s.allow_amounts,"allow_merchants":s.allow_merchants,"allow_categories":s.allow_categories,"allow_dates":s.allow_dates,"allow_balances":s.allow_balances,"allow_notes":s.allow_notes,"has_api_key":bool(s.api_key_encrypted),"status":"configured" if s.provider and s.model else "not_configured"}
+    return _serialize_ai_settings(s)
 
 @app.put("/api/ai/settings")
 def save_ai_settings(body:AISettingsIn, request:Request, db:Session=Depends(get_db)):
