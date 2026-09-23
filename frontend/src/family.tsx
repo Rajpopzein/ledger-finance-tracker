@@ -2,7 +2,19 @@ import {createContext,useContext,useEffect,useMemo,useState} from 'react'
 import type {ReactNode} from 'react'
 import {api} from './api/client'
 
-export type LinkedUser={id:number;email:string;handle:string;handle_raw:string;name:string;phone?:string|null;link_id:number;label?:string|null}
+export type FamilySharing={transactions:boolean;debts:boolean;investments:boolean}
+export type LinkedUser={
+  id:number
+  email?:string
+  handle:string
+  handle_raw?:string
+  name:string
+  phone?:string|null
+  link_id:number
+  label?:string|null
+  sharing:FamilySharing
+  shared_with_me:FamilySharing
+}
 export type FamilyScopeKey='self'|'family'|'all'|string
 
 type FamilyContextValue={
@@ -28,7 +40,13 @@ export function FamilyProvider({children}:{children:ReactNode}){
   async function refreshFamily(){
     try{
       const network=await api.familyNetwork()
-      const users=(network.linked||[]).map((x:any)=>({...x.user,link_id:x.link_id,label:x.label||null}))
+      const users=(network.linked||[]).map((x:any)=>({
+        ...x.user,
+        link_id:x.link_id,
+        label:x.label||null,
+        sharing:x.sharing||{transactions:true,debts:true,investments:true},
+        shared_with_me:x.shared_with_me||{transactions:true,debts:true,investments:true},
+      }))
       setLinkedUsers(users)
       setIncoming(network.incoming||[])
       setOutgoing(network.outgoing||[])
