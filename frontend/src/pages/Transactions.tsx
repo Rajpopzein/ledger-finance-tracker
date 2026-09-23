@@ -33,6 +33,8 @@ import {claySx,useUI} from '../ui'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
+const DESKTOP_TRANSACTION_COLUMNS='360px 190px 140px 160px 40px'
+const DESKTOP_TRANSACTION_MIN_WIDTH=930
 const localDateTime=(value:string)=>{
   const d=new Date(value)
   const pad=(n:number)=>String(n).padStart(2,'0')
@@ -269,8 +271,25 @@ export default function Transactions(){
 
     {loading?<Stack spacing={1}>
       {[1,2,3,4].map(i=><Skeleton key={i} variant="rounded" height={72} sx={{borderRadius:1.5}}/>)}
-    </Stack>:<Paper sx={{...clay,p:{xs:.5,sm:1.15},minWidth:0}}>
-      <Stack divider={<Divider/>}>
+    </Stack>:<Paper sx={{...clay,p:{xs:.5,sm:1.15},minWidth:0,overflowX:'auto'}}>
+      <Box sx={{minWidth:{xs:0,sm:DESKTOP_TRANSACTION_MIN_WIDTH}}}>
+        <Box sx={{
+          display:{xs:'none',sm:'grid'},
+          gridTemplateColumns:DESKTOP_TRANSACTION_COLUMNS,
+          columnGap:1.15,
+          px:1.25,
+          pb:.85,
+          borderBottom:'1px solid',
+          borderColor:'divider',
+          color:'text.secondary',
+        }}>
+          <Typography variant="caption" fontWeight={800}>Transaction</Typography>
+          <Typography variant="caption" fontWeight={800}>Account</Typography>
+          <Typography variant="caption" fontWeight={800}>Date</Typography>
+          <Typography variant="caption" fontWeight={800} sx={{textAlign:'right'}}>Amount</Typography>
+          <Box/>
+        </Box>
+        <Stack divider={<Divider/>}>
         {data.items.map(t=><Box key={t.id}>
           <Box
             component="button"
@@ -282,8 +301,10 @@ export default function Transactions(){
               color:'text.primary',textAlign:'left',cursor:'pointer',borderRadius:1.4,
               p:{xs:1,sm:1.25},
               display:'grid',
-              gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(0,2fr) minmax(110px,1fr) minmax(100px,.8fr) auto'},
-              gap:{xs:.6,sm:1.15},alignItems:'center',
+              gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:DESKTOP_TRANSACTION_COLUMNS},
+              columnGap:{xs:.6,sm:1.15},
+              rowGap:.6,
+              alignItems:'center',
               '&:hover':{bgcolor:'action.hover'},
             }}
           >
@@ -395,7 +416,8 @@ export default function Transactions(){
         </Box>)}
 
         {!data.items.length&&<Box sx={{p:3,textAlign:'center'}}><Typography sx={{fontWeight:700}}>No transactions match these filters.</Typography></Box>}
-      </Stack>
+        </Stack>
+      </Box>
 
       {data.total>0&&<Stack direction={{xs:'column',sm:'row'}} spacing={1} justifyContent="space-between" alignItems="center" sx={{pt:1.25}}>
         <Pagination count={data.pages} page={data.page} onChange={(_,value)=>{setPage(value);setExpandedId(null);setEditingId(null)}} size="small" siblingCount={0} boundaryCount={1}/>
