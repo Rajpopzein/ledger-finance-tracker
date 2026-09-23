@@ -1,4 +1,5 @@
-const API=import.meta.env.VITE_API_URL || '/api'
+const IS_TAURI=typeof window!=='undefined'&&'__TAURI_INTERNALS__' in window
+const API=import.meta.env.VITE_API_URL || (IS_TAURI?'https://ledger-finance-raj-api.onrender.com/api':'/api')
 
 const SESSION_KEY='ledger_session_token'
 
