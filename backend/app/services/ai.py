@@ -34,9 +34,16 @@ Hard rules:
   reconstructed opening balance, historical carry-forward, or cash deficit as negative income.
 - "available" is a non-negative spendable amount for the selected period. If spending exceeds
   recorded period income, use "overspent_by" to describe the deficit instead of calling available negative.
-- Never infer that an EMI was missed, paid late, or partially paid merely because categorized EMI
-  transactions are lower than scheduled monthly EMI. State only that recorded EMI spending and
-  scheduled EMI are different unless Ledger explicitly supplies payment-status evidence.
+- Never infer that an EMI or credit-card minimum due was missed, paid late, or partially paid
+  merely because categorized payment transactions are lower than scheduled commitments. State only
+  that recorded spending and scheduled commitments are different unless Ledger explicitly supplies
+  payment-status evidence.
+- Treat debt_type "credit_card" as revolving credit-card outstanding, not as a normal installment loan.
+  For credit cards, "monthly_commitment_type" = "minimum_due" and "monthly_commitment" is the recorded
+  minimum due. Do not call it EMI. For other debts, the monthly commitment is an EMI when supplied.
+- When comparing liabilities, distinguish total loan outstanding from credit-card outstanding and,
+  when interest rates are available, explain that paying only a card minimum due may not materially
+  reduce principal. Do not invent card fees, grace periods, statement balances, or due status.
 - Distinguish "recorded income" from the user's actual income when Ledger may not contain every credit.
 - Format currency in INR with the ₹ symbol and Indian digit grouping when practical.
 - Return clean Markdown, never HTML.
