@@ -85,7 +85,7 @@ export const api={
    p.set('page_size',String(opts.pageSize||25))
    return req<any>(`/transactions?${p.toString()}`)
  },
- aiCategorize:(transactionIds:number[])=>req<any>('/transactions/ai-categorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transaction_ids:transactionIds})}),
+ aiCategorize:(transactionIds:number[],providerUserId?:number)=>req<any>('/transactions/ai-categorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transaction_ids:transactionIds,provider_user_id:providerUserId||null})}),
  undoCategory:(txId:number)=>req<any>(`/transactions/${txId}/category/undo`,{method:'POST'}),
  updateTransaction:(txId:number,body:any)=>req<any>(`/transactions/${txId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  deleteTransaction:(txId:number)=>req<any>(`/transactions/${txId}`,{method:'DELETE'}),
@@ -141,7 +141,7 @@ export const api={
  familyNetwork:()=>req<any>('/family-network'),
  linkFamily:(handle:string,label?:string)=>req<any>('/family-links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({handle,label:label||null})}),
  familyLinkAction:(linkId:number,action:'accept'|'reject')=>req<any>(`/family-links/${linkId}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
- updateFamilySharing:(linkId:number,sharing:{transactions:boolean;debts:boolean;investments:boolean})=>req<any>(`/family-links/${linkId}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sharing)}),
+ updateFamilySharing:(linkId:number,sharing:{transactions:boolean;debts:boolean;investments:boolean;ai_insights:boolean;ai_categorization:boolean})=>req<any>(`/family-links/${linkId}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sharing)}),
  removeFamilyLink:(linkId:number)=>req<any>(`/family-links/${linkId}`,{method:'DELETE'}),
  cash:(body:any)=>req('/transactions/cash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  preview:(accountId:number,file:File,password?:string)=>{
@@ -178,6 +178,18 @@ export const api={
    return req<any>('/imports/upi/commit',{method:'POST',body:f})
  },
  aiSettings:()=>req<any>('/ai/settings'),
+ aiCapabilities:()=>req<any>('/ai/capabilities'),
+ aiHistory:(limit=40)=>req<any>(`/ai/history?limit=${limit}`),
+ aiHistoryDetail:(id:number)=>req<any>(`/ai/history/${id}`),
+ deleteAIHistory:(id:number)=>req<any>(`/ai/history/${id}`,{method:'DELETE'}),
+ clearAIHistory:()=>req<any>('/ai/history',{method:'DELETE'}),
  saveAI:(body:any)=>req('/ai/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- askAI:(question:string,from?:string,to?:string)=>req<any>('/ai/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,from_date:from||null,to_date:to||null})})
+ askAI:(question:string,from?:string,to?:string,familyScope='self',familyUserId?:number,providerUserId?:number)=>req<any>('/ai/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+   question,
+   from_date:from||null,
+   to_date:to||null,
+   family_scope:familyScope,
+   family_user_id:familyUserId||null,
+   provider_user_id:providerUserId||null,
+ })})
 }
