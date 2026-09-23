@@ -86,6 +86,8 @@ export const api={
  },
  aiCategorize:(transactionIds:number[])=>req<any>('/transactions/ai-categorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transaction_ids:transactionIds})}),
  undoCategory:(txId:number)=>req<any>(`/transactions/${txId}/category/undo`,{method:'POST'}),
+ updateTransaction:(txId:number,body:any)=>req<any>(`/transactions/${txId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ deleteTransaction:(txId:number)=>req<any>(`/transactions/${txId}`,{method:'DELETE'}),
  setTransactionCategory:(txId:number,category:string)=>req<any>(`/transactions/${txId}/category`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({category})}),
  shortcutStatus:()=>req<any>('/shortcuts/status'),
  shortcutCreateToken:()=>req<any>('/shortcuts/token',{method:'POST'}),
@@ -109,6 +111,7 @@ export const api={
  debts:()=>req<any>('/debts'),
  createDebt:(body:any)=>req<any>('/debts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateDebt:(debtId:number,body:any)=>req<any>(`/debts/${debtId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ deleteDebt:(debtId:number)=>req<any>(`/debts/${debtId}`,{method:'DELETE'}),
  addDebtPayment:(debtId:number,body:any)=>req<any>(`/debts/${debtId}/payments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  debtAIPreview:(file:File)=>{
    const f=new FormData()
