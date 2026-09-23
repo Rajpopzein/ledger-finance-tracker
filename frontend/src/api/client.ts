@@ -156,6 +156,7 @@ export const api={
  },
  accounts:()=>req<any[]>('/accounts'),
  createAccount:(body:any)=>req<any>('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ deleteAccount:(accountId:number)=>req<any>(`/accounts/${accountId}?delete_transactions=true`,{method:'DELETE'}),
  categories:()=>req<any[]>('/categories'),
  profile:()=>req<any>('/profile'),
  updateProfile:(body:{name:string;handle:string;phone?:string|null})=>req<any>('/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
@@ -166,6 +167,16 @@ export const api={
  familyLinkAction:(linkId:number,action:'accept'|'reject')=>req<any>(`/family-links/${linkId}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
  updateFamilySharing:(linkId:number,sharing:{transactions:boolean;debts:boolean;investments:boolean;ai_insights:boolean;ai_categorization:boolean})=>req<any>(`/family-links/${linkId}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sharing)}),
  removeFamilyLink:(linkId:number)=>req<any>(`/family-links/${linkId}`,{method:'DELETE'}),
+ manualTransaction:(body:{
+   amount:number
+   direction:'credit'|'debit'
+   payment_method:'cash'|'upi'
+   account_id?:number|null
+   category:string
+   txn_at:string
+   merchant?:string|null
+   note?:string|null
+ })=>req<any>('/transactions/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  cash:(body:any)=>req('/transactions/cash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  preview:(accountId:number,file:File,password?:string)=>{
    const f=new FormData()
