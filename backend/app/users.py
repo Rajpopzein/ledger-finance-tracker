@@ -6,8 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import FamilyLink, User
-from .schemas import FamilyLinkAction, FamilyLinkCreate, UserPreferencesUpdate, UserProfileUpdate, UserSignup
+from .models import FamilyLink, FamilySharingPreference, User
+from .schemas import FamilyLinkAction, FamilyLinkCreate, FamilySharingUpdate, UserPreferencesUpdate, UserProfileUpdate, UserSignup
 from .services.auth import hash_password
 
 router = APIRouter()
@@ -132,6 +132,70 @@ def linked_user_ids(db: Session, user_id: int) -> list[int]:
         )
     return list(dict.fromkeys(ids))
 
+def _sharing_values(pref: FamilySharingPreference | None):
+    # Missing rows preserve Ledger's existing family-sharing behavior.
+    return {
+        "transactions": True if pref is None else bool(pref.share_transactions),
+        "debts": True if pref is None else bool(pref.share_debts),
+        "investments": True if pref is None else bool(pref.share_investments),
+    }
+
+def family_link_sharing(db: Session, link: FamilyLink, owner_user_id: int):
+    pref = db.scalar(
+        select(FamilySharingPreference).where(
+            FamilySharingPreference.family_link_id == link.id,
+            FamilySharingPreference.owner_user_id == owner_user_id,
+        )
+    )
+    return _sharing_values(pref)
+
+def shared_linked_user_ids(db: Session, viewer_user_id: int, resource: str) -> list[int]:
+    if resource not in {"transactions", "debts", "investments"}:
+        raise ValueError("Unknown family sharing resource")
+    links = db.scalars(
+        select(FamilyLink).where(
+            FamilyLink.status == "accepted",
+            or_(
+                FamilyLink.requester_user_id == viewer_user_id,
+                FamilyLink.target_user_id == viewer_user_id,
+            ),
+        )
+    ).all()
+    allowed = []
+    for link in links:
+        other_id = (
+            link.target_user_id
+            if link.requester_user_id == viewer_user_id
+            else link.requester_user_id
+        )
+        sharing = family_link_sharing(db, link, other_id)
+        if sharing[resource]:
+            allowed.append(other_id)
+    return list(dict.fromkeys(allowed))
+
+def scoped_family_user_ids(
+    db: Session,
+    viewer_user_id: int,
+    family_scope: str = "self",
+    family_user_id: int | None = None,
+    resource: str = "transactions",
+) -> list[int]:
+    linked = linked_user_ids(db, viewer_user_id)
+    shared = shared_linked_user_ids(db, viewer_user_id, resource)
+    if family_user_id is not None:
+        if family_user_id not in linked:
+            raise HTTPException(403, "That user is not linked to your family")
+        if family_user_id not in shared:
+            raise HTTPException(403, f"That family member is not sharing {resource} with you")
+        return [family_user_id]
+    if family_scope == "self":
+        return [viewer_user_id]
+    if family_scope == "family":
+        return shared or [-1]
+    if family_scope == "all":
+        return [viewer_user_id, *shared]
+    raise HTTPException(400, "family_scope must be self, family or all")
+
 @router.get("/api/preferences")
 def preferences(request: Request, db: Session = Depends(get_db)):
     user = db.get(User, current_user_id(request))
@@ -197,6 +261,8 @@ def family_network(request: Request, db: Session = Depends(get_db)):
                 if link.requester_user_id == user_id
                 else link.target_label
             ),
+            "sharing": family_link_sharing(db, link, user_id),
+            "shared_with_me": family_link_sharing(db, link, other_id),
         }
 
         if link.status == "accepted":
@@ -287,6 +353,43 @@ def family_link_action(
     db.delete(link)
     db.commit()
     return {"ok": True, "status": "rejected"}
+
+@router.put("/api/family-links/{link_id}/sharing")
+def update_family_sharing(
+    link_id: int,
+    body: FamilySharingUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    link = db.get(FamilyLink, link_id)
+    if not link or link.status != "accepted" or user_id not in (
+        link.requester_user_id,
+        link.target_user_id,
+    ):
+        raise HTTPException(404, "Accepted family link not found")
+
+    pref = db.scalar(
+        select(FamilySharingPreference).where(
+            FamilySharingPreference.family_link_id == link.id,
+            FamilySharingPreference.owner_user_id == user_id,
+        )
+    )
+    if not pref:
+        pref = FamilySharingPreference(
+            family_link_id=link.id,
+            owner_user_id=user_id,
+        )
+        db.add(pref)
+
+    pref.share_transactions = body.transactions
+    pref.share_debts = body.debts
+    pref.share_investments = body.investments
+    db.commit()
+    return {
+        "link_id": link.id,
+        "sharing": _sharing_values(pref),
+    }
 
 @router.delete("/api/family-links/{link_id}")
 def remove_family_link(
