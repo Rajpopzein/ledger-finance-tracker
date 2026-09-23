@@ -28,6 +28,7 @@ import type {TransactionPage,Tx} from '../types'
 import {api} from '../api/client'
 import {usePeriod} from '../period'
 import {useFamily} from '../family'
+import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
@@ -42,14 +43,13 @@ export default function Transactions(){
   const {period}=usePeriod()
   const {familyScope,familyUserId,scopeLabel}=useFamily()
   const {resolvedMode}=useUI()
+  const {accounts,categories}=useAppData()
 
   const [q,setQ]=useState('')
   const [fromDate,setFromDate]=useState(period.from||'')
   const [toDate,setToDate]=useState(period.to||'')
   const [accountId,setAccountId]=useState('')
   const [direction,setDirection]=useState('')
-  const [accounts,setAccounts]=useState<any[]>([])
-  const [categories,setCategories]=useState<any[]>([])
   const [data,setData]=useState<TransactionPage>({items:[],page:1,page_size:25,total:0,pages:1})
   const [expandedId,setExpandedId]=useState<number|null>(null)
   const [editingId,setEditingId]=useState<number|null>(null)
@@ -70,11 +70,6 @@ export default function Transactions(){
     setToDate(period.to||'')
     setPage(1)
   },[period.from,period.to])
-
-  useEffect(()=>{
-    api.accounts().then(setAccounts).catch(()=>setAccounts([]))
-    api.categories().then(setCategories).catch(()=>setCategories([]))
-  },[])
 
   async function load(){
     setLoading(true)
