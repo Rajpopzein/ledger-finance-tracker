@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import Overview from './pages/Overview'
 import Transactions from './pages/Transactions'
 import Debts from './pages/Debts'
+import Investments from './pages/Investments'
 import ImportReview from './pages/ImportReview'
 import AIInsights from './pages/AIInsights'
 import Profile from './pages/Profile'
@@ -30,6 +31,7 @@ export default function App(){
       <Route path="/" element={<Overview/>}/>
       <Route path="/transactions" element={<Transactions/>}/>
       <Route path="/debts" element={<Debts/>}/>
+      <Route path="/investments" element={<Investments/>}/>
       <Route path="/import" element={<ImportReview/>}/>
       <Route path="/ai" element={<AIInsights/>}/>
       <Route path="/profile" element={<Profile/>}/>
