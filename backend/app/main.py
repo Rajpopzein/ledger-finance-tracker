@@ -24,6 +24,7 @@ from .upi_imports import router as upi_imports_router
 from .bank_imports import router as bank_imports_router
 from .finance_features import router as finance_features_router
 from .shortcuts import router as shortcuts_router
+from .investments import router as investments_router
 from .users import router as users_router, linked_user_ids, current_user_id
 from .services.auth import (
     SESSION_COOKIE,
@@ -39,6 +40,7 @@ app.include_router(bank_imports_router)
 app.include_router(users_router)
 app.include_router(finance_features_router)
 app.include_router(shortcuts_router)
+app.include_router(investments_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
@@ -420,8 +422,23 @@ def summary(
         _filtered_stmt(from_date,to_date,user_ids)
         .where(Transaction.excluded_from_analytics==False)
     ).all()
-    income=sum((t.amount for t in items if t.direction=="credit"),Decimal("0"))
+    new_income=sum((t.amount for t in items if t.direction=="credit"),Decimal("0"))
     spent=sum((t.amount for t in items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
+
+    opening_balance=Decimal("0")
+    if from_date is not None:
+        opening_items=db.scalars(
+            _filtered_stmt(None,from_date-timedelta(days=1),user_ids)
+            .where(Transaction.excluded_from_analytics==False)
+        ).all()
+        opening_income=sum((t.amount for t in opening_items if t.direction=="credit"),Decimal("0"))
+        opening_spent=sum((
+            t.amount for t in opening_items
+            if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
+        ),Decimal("0"))
+        opening_balance=opening_income-opening_spent
+
+    income=opening_balance+new_income
     verified=sum(1 for t in items if t.verification_status=="verified")
     review=sum(1 for t in items if t.verification_status=="needs_review")
     cats=defaultdict(Decimal)
@@ -444,9 +461,25 @@ def summary(
                 user_ids,
             ).where(Transaction.excluded_from_analytics==False)
         ).all()
-        m_income=sum((t.amount for t in month_items if t.direction=="credit"),Decimal("0"))
+        m_new_income=sum((t.amount for t in month_items if t.direction=="credit"),Decimal("0"))
         m_spent=sum((t.amount for t in month_items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
-        months.append({"label":month_start.strftime("%b"),"income":float(m_income),"spent":float(m_spent)})
+        before_month=db.scalars(
+            _filtered_stmt(None,month_start-timedelta(days=1),user_ids)
+            .where(Transaction.excluded_from_analytics==False)
+        ).all()
+        m_opening_income=sum((t.amount for t in before_month if t.direction=="credit"),Decimal("0"))
+        m_opening_spent=sum((
+            t.amount for t in before_month
+            if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
+        ),Decimal("0"))
+        m_opening=m_opening_income-m_opening_spent
+        months.append({
+            "label":month_start.strftime("%b"),
+            "opening_balance":float(m_opening),
+            "new_income":float(m_new_income),
+            "income":float(m_opening+m_new_income),
+            "spent":float(m_spent),
+        })
     family_items=db.scalars(
         _filtered_stmt(from_date,to_date,_scope_user_ids(request,db,"all",None))
         .where(Transaction.excluded_from_analytics==False)
@@ -473,6 +506,8 @@ def summary(
     ]
 
     return {
+        "opening_balance":float(opening_balance),
+        "new_income":float(new_income),
         "income":float(income),
         "spent":float(spent),
         "available":float(income-spent),
