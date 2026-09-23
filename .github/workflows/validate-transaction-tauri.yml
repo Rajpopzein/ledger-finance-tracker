@@ -5,6 +5,10 @@ on:
     branches:
       - feature-transaction-table-tauri-app-20260923
 
+concurrency:
+  group: validate-transaction-tauri
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-22.04
