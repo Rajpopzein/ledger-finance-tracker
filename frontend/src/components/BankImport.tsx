@@ -16,6 +16,7 @@ import {
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded'
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded'
 import {api} from '../api/client'
+import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
 import ExcelPasswordDialog from './ExcelPasswordDialog'
 
@@ -30,8 +31,9 @@ const passwordMessage=(message:string)=>{
 export default function BankImport(){
   const {resolvedMode}=useUI()
   const clay=claySx(resolvedMode)
+  const {accounts:allAccounts}=useAppData()
+  const accounts=allAccounts.filter((x:any)=>x.type==='bank')
 
-  const [accounts,setAccounts]=useState<any[]>([])
   const [account,setAccount]=useState<number|undefined>()
   const [preview,setPreview]=useState<any>(null)
   const [stage,setStage]=useState<ImportStage>('idle')
@@ -45,15 +47,9 @@ export default function BankImport(){
   const busy=stage!=='idle'
 
   useEffect(()=>{
-    api.accounts().then(a=>{
-      const banks=a.filter((x:any)=>x.type==='bank')
-      setAccounts(banks)
-      setAccount(banks[0]?.id)
-    }).catch(()=>{
-      setAccounts([])
-      setAccount(undefined)
-    })
-  },[])
+    if(account&&accounts.some((x:any)=>x.id===account))return
+    setAccount(accounts[0]?.id)
+  },[allAccounts,account])
 
   function handleProtectedExcel(message:string){
     const promptError=passwordMessage(message)
