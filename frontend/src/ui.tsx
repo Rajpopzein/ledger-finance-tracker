@@ -12,6 +12,7 @@ type UIContextValue={
   dashboardTemplate:DashboardTemplate
   setThemeMode:(mode:ThemeMode)=>void
   setDashboardTemplate:(template:DashboardTemplate)=>void
+  hydratePreferences:(preferences:any)=>void
   savePreferences:()=>Promise<void>
   loading:boolean
 }
@@ -37,22 +38,6 @@ export function UIProvider({children}:{children:ReactNode}){
     return()=>media.removeEventListener?.('change',onChange)
   },[])
 
-  useEffect(()=>{
-    let active=true
-    api.preferences()
-      .then(p=>{
-        if(!active)return
-        const mode=(p.theme_mode||'dark') as ThemeMode
-        const template=(p.dashboard_template||'balanced') as DashboardTemplate
-        setThemeModeState(mode)
-        setDashboardTemplateState(template)
-        localStorage.setItem('ledger-theme',mode)
-        localStorage.setItem('ledger-dashboard-template',template)
-      })
-      .catch(()=>{})
-    return()=>{active=false}
-  },[])
-
   const resolvedMode=useMemo(()=>resolveMode(themeMode),[themeMode,systemTick])
 
   function setThemeMode(mode:ThemeMode){
@@ -62,6 +47,15 @@ export function UIProvider({children}:{children:ReactNode}){
 
   function setDashboardTemplate(template:DashboardTemplate){
     setDashboardTemplateState(template)
+    localStorage.setItem('ledger-dashboard-template',template)
+  }
+
+  function hydratePreferences(preferences:any){
+    const mode=(preferences?.theme_mode||'dark') as ThemeMode
+    const template=(preferences?.dashboard_template||'balanced') as DashboardTemplate
+    setThemeModeState(mode)
+    setDashboardTemplateState(template)
+    localStorage.setItem('ledger-theme',mode)
     localStorage.setItem('ledger-dashboard-template',template)
   }
 
@@ -139,6 +133,7 @@ export function UIProvider({children}:{children:ReactNode}){
     dashboardTemplate,
     setThemeMode,
     setDashboardTemplate,
+    hydratePreferences,
     savePreferences,
     loading,
   }}>
