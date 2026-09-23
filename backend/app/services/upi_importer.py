@@ -266,6 +266,159 @@ def _pdf_merchant(lines, label):
                         return candidate[:160]
     return label
 
+GPAY_ROW_RE = re.compile(
+    r"^(?P<date>\\d{1,2}\\s*[A-Za-z]{3},\\s*\\d{4})\\s+"
+    r"(?P<detail>.+?)\\s+₹\\s*(?P<amount>\\d[\\d,]*(?:\\.\\d{1,2})?)$",
+    re.I,
+)
+GPAY_TIME_REF_RE = re.compile(
+    r"^(?P<time>\\d{1,2}:\\d{2}\\s*(?:AM|PM))\\s+"
+    r"UPI\\s*Transaction\\s*ID\\s*:\\s*(?P<ref>\\d{9,18})$",
+    re.I,
+)
+
+def _gpay_detail(detail: str):
+    patterns = (
+        ("internal_transfer", "debit", re.compile(r"^self\\s*transfer\\s*to\\s*(.+)$", re.I)),
+        ("income", "credit", re.compile(r"^received\\s*from\\s*(.+)$", re.I)),
+        ("expense", "debit", re.compile(r"^paid\\s*to\\s*(.+)$", re.I)),
+    )
+    for txn_type, direction, pattern in patterns:
+        match = pattern.match(detail)
+        if match:
+            return txn_type, direction, re.sub(r"\\s+", " ", match.group(1)).strip()
+    return None, None, None
+
+def _gpay_date(date_text: str, time_text: str):
+    clean_date = re.sub(r"^(\\d{1,2})([A-Za-z]{3})", r"\\1 \\2", date_text.strip())
+    clean_time = re.sub(r"(?i)(\\d)(AM|PM)$", r"\\1 \\2", re.sub(r"\\s+", " ", time_text).strip())
+    return datetime.strptime(f"{clean_date} {clean_time}", "%d %b, %Y %I:%M %p")
+
+def _gpay_header_totals(text: str):
+    flat = re.sub(r"\\s+", " ", text)
+    sent_match = re.search(r"\\bSent\\s+₹\\s*([\\d,]+(?:\\.\\d{1,2})?)", flat, re.I)
+    received_match = re.search(r"\\bReceived\\s+₹\\s*([\\d,]+(?:\\.\\d{1,2})?)", flat, re.I)
+    sent = _decimal(sent_match.group(1)) if sent_match else None
+    received = _decimal(received_match.group(1)) if received_match else None
+    return sent, received
+
+def _google_pay_pdf_rows(reader: PdfReader, label: str):
+    pages = []
+    for page in reader.pages:
+        try:
+            pages.append(page.extract_text(extraction_mode="layout") or "")
+        except TypeError:
+            pages.append(page.extract_text() or "")
+        except Exception:
+            pages.append("")
+
+    text = "\\n".join(pages).strip()
+    if not text:
+        raise ValueError(
+            "This Google Pay PDF does not contain selectable text. "
+            "Please export the transaction statement PDF directly from Google Pay."
+        )
+
+    rows = []
+    for page_text in pages:
+        lines = [
+            re.sub(r"\\s+", " ", line).strip()
+            for line in page_text.splitlines()
+            if line.strip()
+        ]
+        starts = []
+        for index, line in enumerate(lines):
+            match = GPAY_ROW_RE.match(line)
+            if not match:
+                continue
+            txn_type, direction, merchant = _gpay_detail(match.group("detail"))
+            if txn_type:
+                starts.append((index, match, txn_type, direction, merchant))
+
+        for pos, (start_index, match, txn_type, direction, merchant) in enumerate(starts):
+            end_index = starts[pos + 1][0] if pos + 1 < len(starts) else min(len(lines), start_index + 7)
+            block_lines = lines[start_index:end_index]
+
+            time_ref = None
+            for line in block_lines[1:4]:
+                candidate = GPAY_TIME_REF_RE.match(line)
+                if candidate:
+                    time_ref = candidate
+                    break
+            if not time_ref:
+                continue
+
+            try:
+                txn_at = _gpay_date(match.group("date"), time_ref.group("time"))
+            except ValueError:
+                continue
+
+            amount = _decimal(match.group("amount"))
+            if amount is None or amount == 0:
+                continue
+
+            source_account = None
+            destination_account = merchant if txn_type == "internal_transfer" else None
+            for line in block_lines[1:]:
+                source_match = re.match(r"^paid\\s*by\\s*(.+)$", line, re.I)
+                if source_match:
+                    source_account = re.sub(r"\\s+", " ", source_match.group(1)).strip()
+                    continue
+                destination_match = re.match(r"^paid\\s*to\\s*(.+)$", line, re.I)
+                if direction == "credit" and destination_match:
+                    destination_account = re.sub(r"\\s+", " ", destination_match.group(1)).strip()
+
+            account_hint = source_account if direction == "debit" else destination_account
+            reference = time_ref.group("ref")
+            description_parts = [
+                "Google Pay",
+                f"{'received from' if direction == 'credit' else 'paid to'} {merchant}",
+            ]
+            if account_hint:
+                description_parts.append(account_hint)
+
+            rows.append({
+                "txn_at": txn_at,
+                "amount": abs(amount),
+                "direction": direction,
+                "txn_type": txn_type,
+                "description": " | ".join(description_parts),
+                "merchant": merchant[:160],
+                "upi_ref": reference,
+                "account_hint": account_hint,
+                "source_account_hint": source_account,
+                "destination_account_hint": destination_account,
+                "source_app": "google_pay",
+                "source_label": label,
+            })
+
+    if not rows:
+        raise ValueError(
+            "Ledger could read the Google Pay PDF, but no transaction rows matched the supported statement format."
+        )
+
+    expected_sent, expected_received = _gpay_header_totals(text)
+    parsed_sent = sum(
+        (row["amount"] for row in rows if row["direction"] == "debit" and row["txn_type"] != "internal_transfer"),
+        Decimal("0"),
+    )
+    parsed_received = sum(
+        (row["amount"] for row in rows if row["direction"] == "credit"),
+        Decimal("0"),
+    )
+    if expected_sent is not None and abs(parsed_sent - expected_sent) > Decimal("0.01"):
+        raise ValueError(
+            f"Google Pay PDF was only partially parsed: statement Sent total is ₹{expected_sent}, "
+            f"but Ledger found ₹{parsed_sent}. No transactions were imported."
+        )
+    if expected_received is not None and abs(parsed_received - expected_received) > Decimal("0.01"):
+        raise ValueError(
+            f"Google Pay PDF was only partially parsed: statement Received total is ₹{expected_received}, "
+            f"but Ledger found ₹{parsed_received}. No transactions were imported."
+        )
+
+    return rows
+
 def _pdf_rows(content: bytes, app: str):
     label = app_label(app)
     try:
@@ -435,6 +588,12 @@ def parse_upi_statement(app: str, name: str, content: bytes):
         return normalize_upi_rows(_collect_json_rows(payload), app)
 
     if lower.endswith(".pdf"):
+        if app == "google_pay":
+            try:
+                reader = PdfReader(io.BytesIO(content))
+            except Exception as exc:
+                raise ValueError("Could not open this Google Pay PDF statement") from exc
+            return _google_pay_pdf_rows(reader, app_label(app))
         return _pdf_rows(content, app)
 
     raise ValueError("UPI app import supports CSV, XLSX, XLS, JSON and PDF files")
