@@ -77,7 +77,11 @@ export type Debt={
 export type DebtList={
   items:Debt[]
   total_outstanding:number
+  loan_outstanding:number
+  credit_card_outstanding:number
   monthly_emi:number
+  monthly_loan_emi:number
+  monthly_card_minimum_due:number
   active_count:number
 }
 
