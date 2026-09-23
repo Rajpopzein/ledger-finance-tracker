@@ -13,6 +13,8 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ArrowOutwardRoundedIcon from '@mui/icons-material/ArrowOutwardRounded'
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded'
+import CreditCardRoundedIcon from '@mui/icons-material/CreditCardRounded'
+import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded'
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
 import TrendingDownRoundedIcon from '@mui/icons-material/TrendingDownRounded'
 import QuickCash from '../components/QuickCash'
@@ -244,7 +246,11 @@ export default function Overview(){
     </Box>
   </Paper>
 
-  const metrics=<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'repeat(3,1fr)'},gap:{xs:1.15,sm:2}}}>
+  const metrics=<Box sx={{
+    display:'grid',
+    gridTemplateColumns:{xs:'1fr',sm:'repeat(2,1fr)',md:'repeat(3,1fr)',xl:'repeat(5,minmax(0,1fr))'},
+    gap:{xs:1.15,sm:2},
+  }}>
     <MetricCard
       mode={resolvedMode}
       label="INCOME RESOURCES"
@@ -252,8 +258,34 @@ export default function Overview(){
       sub={`Opening ${money(s.opening_balance)} + new income ${money(s.new_income)}`}
       icon={<TrendingUpRoundedIcon/>}
     />
-    <MetricCard mode={resolvedMode} label="SPENT" value={money(s.spent)} sub="Transfers excluded" icon={<TrendingDownRoundedIcon/>}/>
-    <MetricCard mode={resolvedMode} label="LEDGER ITEMS" value={String(s.total)} sub={s.needs_review?`${s.needs_review} need review`:'All clear'} icon={<AccountBalanceWalletRoundedIcon/>}/>
+    <MetricCard
+      mode={resolvedMode}
+      label="SPENT"
+      value={money(s.spent)}
+      sub="Transfers and investments excluded"
+      icon={<TrendingDownRoundedIcon/>}
+    />
+    <MetricCard
+      mode={resolvedMode}
+      label="OUTSTANDING DEBT"
+      value={money(s.debt_outstanding)}
+      sub={s.debt_count?`${s.debt_count} open debt${s.debt_count===1?'':'s'} · current snapshot`:'No open debt'}
+      icon={<CreditCardRoundedIcon/>}
+    />
+    <MetricCard
+      mode={resolvedMode}
+      label="EST. NET WORTH"
+      value={money(s.net_worth)}
+      sub={`Cash ${money(s.liquid_balance)} + investments ${money(s.investment_value)} − debt`}
+      icon={<SavingsRoundedIcon/>}
+    />
+    <MetricCard
+      mode={resolvedMode}
+      label="LEDGER ITEMS"
+      value={String(s.total)}
+      sub={s.needs_review?`${s.needs_review} need review`:'All clear'}
+      icon={<AccountBalanceWalletRoundedIcon/>}
+    />
   </Box>
 
   const cards={
