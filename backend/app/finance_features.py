@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from .models import Category, Debt, DebtPayment, Transaction
-from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate
+from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate
 from .services.ai import categorize_transactions, extract_debt_from_document
 from .users import current_user_id
 
@@ -106,6 +106,31 @@ async def ai_categorize_transactions(
         "eligible": len(eligible),
         "applied": len(applied),
         "items": applied,
+    }
+
+@router.patch("/api/transactions/{tx_id}/category")
+def set_transaction_category(
+    tx_id: int,
+    body: TransactionCategoryUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    tx = db.get(Transaction, tx_id)
+    if not tx or tx.user_id != user_id:
+        raise HTTPException(404, "Transaction not found")
+    category = _category(db, user_id, body.category.strip())
+    tx.category_id = category.id
+    tx.category_previous_id = None
+    tx.category_source = "manual"
+    tx.category_undo_available = False
+    db.commit()
+    return {
+        "ok": True,
+        "transaction_id": tx.id,
+        "category": category.name,
+        "category_source": "manual",
+        "can_undo_category": False,
     }
 
 @router.post("/api/transactions/{tx_id}/category/undo")
