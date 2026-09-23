@@ -15,7 +15,7 @@ from .db import get_db
 from .models import InvestmentHolding
 from .schemas import InvestmentCreate, InvestmentUpdate
 from .services.excel_security import unlock_excel
-from .users import current_user_id
+from .users import current_user_id, scoped_family_user_ids
 
 router = APIRouter()
 
@@ -192,6 +192,7 @@ def _serialize(row: InvestmentHolding):
     pnl = (current - row.invested_amount) if current is not None else None
     return {
         "id": row.id,
+        "user_id": row.user_id,
         "platform": row.platform,
         "asset_type": row.asset_type,
         "symbol": row.symbol,
@@ -209,11 +210,23 @@ def _serialize(row: InvestmentHolding):
     }
 
 @router.get("/api/investments")
-def list_investments(request: Request, db: Session = Depends(get_db)):
-    user_id = current_user_id(request)
+def list_investments(
+    request: Request,
+    family_scope: str = "self",
+    family_user_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    viewer_user_id = current_user_id(request)
+    user_ids = scoped_family_user_ids(
+        db,
+        viewer_user_id,
+        family_scope,
+        family_user_id,
+        "investments",
+    )
     items = db.scalars(
         select(InvestmentHolding)
-        .where(InvestmentHolding.user_id == user_id)
+        .where(InvestmentHolding.user_id.in_(user_ids))
         .order_by(InvestmentHolding.platform, InvestmentHolding.symbol)
     ).all()
     invested = sum((x.invested_amount for x in items), Decimal("0"))
