@@ -34,6 +34,13 @@ from .services.auth import (
     read_session_claims,
 )
 
+NATIVE_APP_ORIGINS={
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+}
+CONFIGURED_CORS_ORIGINS={x.strip().rstrip("/") for x in settings.cors_origins.split(",") if x.strip()}
+
 app = FastAPI(title="Ledger v1 API")
 app.include_router(upi_imports_router)
 app.include_router(bank_imports_router)
@@ -43,7 +50,7 @@ app.include_router(shortcuts_router)
 app.include_router(investments_router)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[x.strip() for x in settings.cors_origins.split(",") if x.strip()],
+    allow_origins=sorted(CONFIGURED_CORS_ORIGINS|NATIVE_APP_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,8 +72,7 @@ def _origin_allowed(request: Request, origin: str) -> bool:
             return True
     except Exception:
         return False
-    configured = {x.strip().rstrip("/") for x in settings.cors_origins.split(",") if x.strip()}
-    return origin.rstrip("/") in configured
+    return origin.rstrip("/") in (CONFIGURED_CORS_ORIGINS|NATIVE_APP_ORIGINS)
 
 @app.middleware("http")
 async def auth_guard(request: Request, call_next):
