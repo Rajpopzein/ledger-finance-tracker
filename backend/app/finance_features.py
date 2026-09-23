@@ -96,6 +96,8 @@ async def ai_categorize_transactions(
             continue
         tx.category_previous_id = tx.category_id
         tx.category_id = category.id
+        if tx.direction == "debit":
+            tx.txn_type = "investment" if category.name == "Investments" else ("expense" if tx.txn_type == "investment" else tx.txn_type)
         tx.category_source = "ai"
         tx.category_undo_available = True
         applied.append(suggestion)
@@ -121,6 +123,8 @@ def set_transaction_category(
         raise HTTPException(404, "Transaction not found")
     category = _category(db, user_id, body.category.strip())
     tx.category_id = category.id
+    if tx.direction == "debit":
+        tx.txn_type = "investment" if category.name == "Investments" else ("expense" if tx.txn_type == "investment" else tx.txn_type)
     tx.category_previous_id = None
     tx.category_source = "manual"
     tx.category_undo_available = False
@@ -146,7 +150,10 @@ def undo_ai_category(
     if not tx.category_undo_available or tx.category_source != "ai":
         raise HTTPException(400, "No AI category change is available to undo")
 
+    previous = db.get(Category, tx.category_previous_id) if tx.category_previous_id else None
     tx.category_id = tx.category_previous_id
+    if tx.direction == "debit":
+        tx.txn_type = "investment" if previous and previous.name == "Investments" else ("expense" if tx.txn_type == "investment" else tx.txn_type)
     tx.category_previous_id = None
     tx.category_source = None
     tx.category_undo_available = False
