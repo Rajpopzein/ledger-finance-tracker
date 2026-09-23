@@ -95,3 +95,33 @@ class DebtPaymentCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     paid_at: datetime
     note: str | None = Field(default=None, max_length=255)
+
+
+class TransactionCategoryUpdate(BaseModel):
+    category: str = Field(min_length=1, max_length=80)
+
+class InvestmentCreate(BaseModel):
+    platform: str = Field(default="Manual", min_length=1, max_length=50)
+    asset_type: str = Field(default="equity", min_length=1, max_length=40)
+    symbol: str = Field(min_length=1, max_length=80)
+    name: str | None = Field(default=None, max_length=160)
+    isin: str | None = Field(default=None, max_length=20)
+    quantity: Decimal = Field(default=Decimal("0"), ge=0)
+    average_price: Decimal | None = Field(default=None, ge=0)
+    invested_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    current_price: Decimal | None = Field(default=None, ge=0)
+    current_value: Decimal | None = Field(default=None, ge=0)
+    as_of_date: datetime | None = None
+
+class InvestmentUpdate(BaseModel):
+    platform: str | None = Field(default=None, min_length=1, max_length=50)
+    asset_type: str | None = Field(default=None, min_length=1, max_length=40)
+    symbol: str | None = Field(default=None, min_length=1, max_length=80)
+    name: str | None = Field(default=None, max_length=160)
+    isin: str | None = Field(default=None, max_length=20)
+    quantity: Decimal | None = Field(default=None, ge=0)
+    average_price: Decimal | None = Field(default=None, ge=0)
+    invested_amount: Decimal | None = Field(default=None, ge=0)
+    current_price: Decimal | None = Field(default=None, ge=0)
+    current_value: Decimal | None = Field(default=None, ge=0)
+    as_of_date: datetime | None = None
