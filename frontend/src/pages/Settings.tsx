@@ -3,6 +3,10 @@ import {
   Alert,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -74,6 +78,10 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
   const [msg,setMsg]=useState('')
   const [acc,setAcc]=useState({institution:'',account_mask:'',name:''})
   const [prefMsg,setPrefMsg]=useState('')
+  const [accountMsg,setAccountMsg]=useState('')
+  const [accountError,setAccountError]=useState('')
+  const [deleteAccount,setDeleteAccount]=useState<any|null>(null)
+  const [deleteBusy,setDeleteBusy]=useState(false)
 
 
   useEffect(()=>{
@@ -93,9 +101,36 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
 
   async function addAccount(){
     if(!acc.institution.trim())return
-    await api.createAccount({...acc,type:'bank'})
-    setAcc({institution:'',account_mask:'',name:''})
-    await refreshAccounts()
+    setAccountMsg('')
+    setAccountError('')
+    try{
+      await api.createAccount({...acc,type:'bank'})
+      setAcc({institution:'',account_mask:'',name:''})
+      await refreshAccounts()
+      setAccountMsg('Bank account added.')
+    }catch(e:any){
+      setAccountError(e.message||'Could not add bank account.')
+    }
+  }
+
+  async function confirmDeleteAccount(){
+    if(!deleteAccount||deleteBusy)return
+    setDeleteBusy(true)
+    setAccountMsg('')
+    setAccountError('')
+    try{
+      const result=await api.deleteAccount(deleteAccount.id)
+      const count=Number(result.deleted_transactions||0)
+      setAccountMsg(
+        `${deleteAccount.name} removed. ${count.toLocaleString('en-IN')} transaction${count===1?'':'s'} deleted with this bank account.`
+      )
+      setDeleteAccount(null)
+      await refreshAccounts()
+    }catch(e:any){
+      setAccountError(e.message||'Could not remove bank account.')
+    }finally{
+      setDeleteBusy(false)
+    }
   }
 
   const clay=claySx(resolvedMode)
@@ -175,17 +210,32 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
         <Typography variant="h2">Bank accounts</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mb:2}}>Only your own accounts are shown here.</Typography>
 
+        {accountError&&<Alert severity="error" sx={{mb:1.5}}>{accountError}</Alert>}
+        {accountMsg&&<Alert severity="success" sx={{mb:1.5}}>{accountMsg}</Alert>}
+
         <Stack spacing={1} sx={{mb:2}}>
           {accounts.filter(a=>a.type==='bank').map(a=><Box key={a.id} sx={{
             display:'flex',
+            alignItems:{xs:'flex-start',sm:'center'},
             justifyContent:'space-between',
-            gap:2,
+            flexDirection:{xs:'column',sm:'row'},
+            gap:1,
             p:1.4,
             borderRadius:2.5,
             bgcolor:'action.hover',
           }}>
-            <Typography fontWeight={700}>{a.name}</Typography>
-            <Typography variant="body2" color="text.secondary">{a.institution}</Typography>
+            <Box sx={{minWidth:0}}>
+              <Typography fontWeight={700} sx={{overflowWrap:'anywhere'}}>{a.name}</Typography>
+              <Typography variant="body2" color="text.secondary">{a.institution}</Typography>
+            </Box>
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={()=>setDeleteAccount(a)}
+            >
+              Remove
+            </Button>
           </Box>)}
           {!accounts.filter(a=>a.type==='bank').length&&<Typography color="text.secondary">No bank accounts added yet.</Typography>}
         </Stack>
@@ -226,6 +276,34 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
         </Stack>
       </Paper>
     </Box>
+
+    <Dialog
+      open={!!deleteAccount}
+      onClose={deleteBusy?undefined:()=>setDeleteAccount(null)}
+      fullWidth
+      maxWidth="xs"
+    >
+      <DialogTitle>Remove bank account?</DialogTitle>
+      <DialogContent>
+        <Stack spacing={1.4} sx={{pt:.5}}>
+          <Alert severity="error">
+            This permanently deletes the bank account and every transaction tied to it.
+          </Alert>
+          <Typography variant="body2">
+            Bank account: <strong>{deleteAccount?.name}</strong>
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Imported bank transactions, manually added UPI transactions, reconciled entries, and other transaction history recorded under this bank account will be removed from Ledger. This cannot be undone.
+          </Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{p:2}}>
+        <Button onClick={()=>setDeleteAccount(null)} disabled={deleteBusy}>Cancel</Button>
+        <Button color="error" variant="contained" onClick={confirmDeleteAccount} disabled={deleteBusy}>
+          {deleteBusy?'Removing…':'Delete account & transactions'}
+        </Button>
+      </DialogActions>
+    </Dialog>
 
     <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
       <Typography variant="h2">AI privacy</Typography>
