@@ -1,4 +1,5 @@
 import hashlib
+import re
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
@@ -23,6 +24,33 @@ def _user_accounts(db: Session, user_id: int):
         .where(Account.user_id == user_id, Account.is_active == True)
         .order_by(Account.id)
     ).all()
+
+def _account_text(value: str | None):
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+def _accounts_for_hint(accounts, hint: str | None):
+    if not hint:
+        return []
+    hint_text = _account_text(hint)
+    digit_groups = re.findall(r"\d{2,4}", str(hint))
+    suffix = digit_groups[-1] if digit_groups else None
+
+    mask_matches = []
+    institution_matches = []
+    for account in accounts:
+        mask = re.sub(r"\D", "", str(account.account_mask or ""))
+        if suffix and mask and mask.endswith(suffix):
+            mask_matches.append(account)
+            continue
+
+        institution = _account_text(account.institution)
+        name = _account_text(account.name)
+        if (institution and institution in hint_text) or (name and name in hint_text):
+            institution_matches.append(account)
+
+    if mask_matches:
+        return mask_matches
+    return institution_matches
 
 def _unassigned_upi_account(db: Session, user_id: int):
     account = db.scalar(
@@ -84,12 +112,19 @@ def _classify(db: Session, user_id: int, row):
         if exact:
             return exact, "upi_ref", 1.0, "existing"
 
-    # Reuse the deterministic matcher across every real account owned by the user.
-    # Do not stop on a fuzzy hit because a later account may contain an exact match.
+    # Prefer the account named by Google Pay ("Paid by"/"Paid to") before
+    # trying the user's remaining accounts. Do not stop on a fuzzy hit because
+    # a later account may contain an exact reference match.
+    accounts = [
+        account for account in _user_accounts(db, user_id)
+        if not (account.type == "upi" and account.institution == "UPI")
+    ]
+    hinted = _accounts_for_hint(accounts, row.get("account_hint"))
+    hinted_ids = {account.id for account in hinted}
+    ordered_accounts = [*hinted, *[account for account in accounts if account.id not in hinted_ids]]
+
     review_candidate = None
-    for account in _user_accounts(db, user_id):
-        if account.type == "upi" and account.institution == "UPI":
-            continue
+    for account in ordered_accounts:
         match, method, score = find_match(
             db,
             account_id=account.id,
@@ -174,6 +209,8 @@ async def preview_upi(
             "state": state,
             "match_id": match.id if match else None,
             "matched_account": match.account.name if match and match.account else None,
+            "account_hint": row.get("account_hint"),
+            "txn_type": row.get("txn_type") or ("income" if row["direction"] == "credit" else "expense"),
             "match_method": method,
             "score": score,
         })
@@ -271,8 +308,15 @@ async def commit_upi(
             linked += 1
             continue
 
+        real_accounts = [
+            account for account in _user_accounts(db, user_id)
+            if not (account.type == "upi" and account.institution == "UPI")
+        ]
+        hinted_accounts = _accounts_for_hint(real_accounts, row.get("account_hint"))
+        target_account = hinted_accounts[0] if len(hinted_accounts) == 1 else fallback_account
+
         fp = fingerprint(
-            fallback_account.id,
+            target_account.id,
             row["txn_at"],
             row["amount"],
             row["direction"],
@@ -280,11 +324,11 @@ async def commit_upi(
         )
         tx = Transaction(
             user_id=user_id,
-            account_id=fallback_account.id,
+            account_id=target_account.id,
             txn_at=row["txn_at"],
             amount=row["amount"],
             direction=row["direction"],
-            txn_type="income" if row["direction"] == "credit" else "expense",
+            txn_type=row.get("txn_type") or ("income" if row["direction"] == "credit" else "expense"),
             payment_method="upi",
             merchant=row["merchant"],
             description_raw=row["description"],
