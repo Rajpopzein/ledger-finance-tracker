@@ -422,7 +422,7 @@ def summary(
         _filtered_stmt(from_date,to_date,user_ids)
         .where(Transaction.excluded_from_analytics==False)
     ).all()
-    new_income=sum((t.amount for t in items if t.direction=="credit"),Decimal("0"))
+    new_income=sum((t.amount for t in items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
     spent=sum((t.amount for t in items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
 
     opening_balance=Decimal("0")
@@ -431,7 +431,7 @@ def summary(
             _filtered_stmt(None,from_date-timedelta(days=1),user_ids)
             .where(Transaction.excluded_from_analytics==False)
         ).all()
-        opening_income=sum((t.amount for t in opening_items if t.direction=="credit"),Decimal("0"))
+        opening_income=sum((t.amount for t in opening_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
         opening_spent=sum((
             t.amount for t in opening_items
             if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
@@ -461,13 +461,13 @@ def summary(
                 user_ids,
             ).where(Transaction.excluded_from_analytics==False)
         ).all()
-        m_new_income=sum((t.amount for t in month_items if t.direction=="credit"),Decimal("0"))
+        m_new_income=sum((t.amount for t in month_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
         m_spent=sum((t.amount for t in month_items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
         before_month=db.scalars(
             _filtered_stmt(None,month_start-timedelta(days=1),user_ids)
             .where(Transaction.excluded_from_analytics==False)
         ).all()
-        m_opening_income=sum((t.amount for t in before_month if t.direction=="credit"),Decimal("0"))
+        m_opening_income=sum((t.amount for t in before_month if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
         m_opening_spent=sum((
             t.amount for t in before_month
             if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
