@@ -3,6 +3,8 @@ import {NavLink,Outlet,useLocation,useNavigate} from 'react-router-dom'
 import {
   Avatar,
   Box,
+  BottomNavigation,
+  BottomNavigationAction,
   Divider,
   Drawer,
   FormControl,
@@ -14,7 +16,6 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded'
@@ -47,9 +48,9 @@ function Shell(){
   const {scopeKey,setScopeKey,linkedUsers,scopeLabel}=useFamily()
   const {resolvedMode}=useUI()
   const {auth}=useAppData()
-  const [mobileOpen,setMobileOpen]=useState(false)
   const theme=useTheme()
   const desktop=useMediaQuery(theme.breakpoints.up('md'))
+  const nativeApp=typeof window!=='undefined'&&((window as any).__TAURI_INTERNALS__!=null||window.location.hostname==='tauri.localhost')
   const location=useLocation()
   const navigate=useNavigate()
 
@@ -86,7 +87,6 @@ function Shell(){
         key={item.to}
         component={NavLink}
         to={item.to}
-        onClick={()=>setMobileOpen(false)}
         sx={{
           display:'flex',
           alignItems:'center',
@@ -122,27 +122,13 @@ function Shell(){
   </Box>
 
   return <Box sx={{minHeight:'100dvh',bgcolor:'background.default'}}>
-    {desktop?<Drawer
+    {desktop&&<Drawer
       variant="permanent"
       sx={{
         width:drawerWidth,
         flexShrink:0,
         '& .MuiDrawer-paper':{
           width:drawerWidth,
-          borderRight:'1px solid',
-          borderColor:'divider',
-          bgcolor:'background.default',
-        }
-      }}
-    >{drawer}</Drawer>:<Drawer
-      variant="temporary"
-      open={mobileOpen}
-      onClose={()=>setMobileOpen(false)}
-      ModalProps={{keepMounted:true}}
-      sx={{
-        '& .MuiDrawer-paper':{
-          width:drawerWidth,
-          maxWidth:'86vw',
           borderRight:'1px solid',
           borderColor:'divider',
           bgcolor:'background.default',
@@ -183,23 +169,13 @@ function Shell(){
             <Typography sx={{fontWeight:800,lineHeight:1.1}}>Ledger</Typography>
             <Typography variant="caption" color="text.secondary">{scopeLabel}</Typography>
           </Box>
-          <Stack direction="row" spacing={0.5}>
-            <IconButton
-              aria-label="iPhone Shortcuts"
-              onClick={()=>navigate('/profile?tab=shortcuts')}
-              sx={{width:40,height:40}}
-            >
-              <PhoneIphoneRoundedIcon/>
-            </IconButton>
-            <IconButton
-              edge="end"
-              aria-label="Open navigation"
-              onClick={()=>setMobileOpen(true)}
-              sx={{width:40,height:40}}
-            >
-              <MenuRoundedIcon/>
-            </IconButton>
-          </Stack>
+          {!nativeApp&&<IconButton
+            aria-label="iPhone Shortcuts"
+            onClick={()=>navigate('/profile?tab=shortcuts')}
+            sx={{width:40,height:40}}
+          >
+            <PhoneIphoneRoundedIcon/>
+          </IconButton>}
         </Stack>}
 
         <Stack
@@ -266,13 +242,43 @@ function Shell(){
           lg:'calc(24px + var(--safe-area-right))',
         },
         pb:{
-          xs:'calc(24px + var(--safe-area-bottom))',
+          xs:nativeApp?'calc(92px + var(--safe-area-bottom))':'calc(24px + var(--safe-area-bottom))',
           md:'calc(24px + var(--safe-area-bottom))',
         },
       }}>
         <Outlet/>
       </Box>
     </Box>
+
+    {!desktop&&nativeApp&&<BottomNavigation
+      showLabels
+      value={nav.findIndex(item=>item.to==='/'?location.pathname==='/':location.pathname.startsWith(item.to))}
+      onChange={(_,index)=>navigate(nav[index].to)}
+      sx={{
+        position:'fixed',
+        left:'calc(8px + var(--safe-area-left))',
+        right:'calc(8px + var(--safe-area-right))',
+        bottom:'calc(8px + var(--safe-area-bottom))',
+        zIndex:30,
+        height:68,
+        borderRadius:3,
+        border:'1px solid',
+        borderColor:'divider',
+        boxShadow:6,
+        bgcolor:'background.paper',
+        overflowX:'auto',
+        justifyContent:'flex-start',
+        '& .MuiBottomNavigationAction-root':{minWidth:72,maxWidth:96,px:.5},
+        '& .MuiBottomNavigationAction-label':{fontSize:10,whiteSpace:'nowrap'},
+        '& .MuiBottomNavigationAction-label.Mui-selected':{fontSize:10},
+      }}
+    >
+      {nav.map(item=><BottomNavigationAction
+        key={item.to}
+        label={item.label==='Profile & Settings'?'Profile':item.label==='AI Insights'?'AI':item.label}
+        icon={item.icon}
+      />)}
+    </BottomNavigation>}
   </Box>
 }
 
