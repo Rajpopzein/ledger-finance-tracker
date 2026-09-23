@@ -6,6 +6,7 @@ import {
   Button,
   Chip,
   Divider,
+  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -41,7 +42,16 @@ export default function Debts(){
   const {resolvedMode}=useUI()
   const navigate=useNavigate()
   const clay=claySx(resolvedMode)
-  const [data,setData]=useState<DebtList>({items:[],total_outstanding:0,monthly_emi:0,active_count:0})
+  const [data,setData]=useState<DebtList>({
+    items:[],
+    total_outstanding:0,
+    loan_outstanding:0,
+    credit_card_outstanding:0,
+    monthly_emi:0,
+    monthly_loan_emi:0,
+    monthly_card_minimum_due:0,
+    active_count:0,
+  })
   const [form,setForm]=useState(emptyForm())
   const [editId,setEditId]=useState<number|null>(null)
   const [editForm,setEditForm]=useState(emptyForm())
@@ -58,13 +68,13 @@ export default function Debts(){
   useEffect(()=>{load()},[])
 
   async function createDebt(){
-    if(!form.lender.trim()||!form.principal||!form.outstanding_balance)return
+    if(!form.lender.trim()||!form.outstanding_balance)return
     setBusy('create');setError('');setNotice('')
     try{
       await api.createDebt({
         lender:form.lender.trim(),
         debt_type:form.debt_type||'loan',
-        principal:Number(form.principal),
+        principal:Number(form.principal||form.outstanding_balance),
         outstanding_balance:Number(form.outstanding_balance),
         interest_rate:form.interest_rate?Number(form.interest_rate):null,
         emi_amount:form.emi_amount?Number(form.emi_amount):null,
@@ -76,7 +86,7 @@ export default function Debts(){
         source_type:'manual',
       })
       setForm(emptyForm())
-      setNotice('Debt added.')
+      setNotice(form.debt_type==='credit_card'?'Credit card outstanding added.':'Debt added.')
       await load()
     }catch(e:any){
       setError(e.message||'Could not add debt.')
@@ -104,13 +114,13 @@ export default function Debts(){
   }
 
   async function saveEdit(debt:Debt){
-    if(!editForm.lender.trim()||!editForm.principal)return
+    if(!editForm.lender.trim()||!editForm.outstanding_balance)return
     setBusy('edit:'+debt.id);setError('');setNotice('')
     try{
       await api.updateDebt(debt.id,{
         lender:editForm.lender.trim(),
         debt_type:editForm.debt_type||'loan',
-        principal:Number(editForm.principal),
+        principal:Number(editForm.principal||editForm.outstanding_balance),
         outstanding_balance:Number(editForm.outstanding_balance||0),
         interest_rate:editForm.interest_rate?Number(editForm.interest_rate):null,
         emi_amount:editForm.emi_amount?Number(editForm.emi_amount):null,
@@ -182,12 +192,13 @@ export default function Debts(){
 
   function debtCard(debt:Debt){
     const editing=editId===debt.id
+    const isCard=debt.debt_type==='credit_card'
     return <Paper key={debt.id} sx={{...clay,p:{xs:1.35,sm:1.8}}}>
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
         <Box sx={{minWidth:0}}>
           <Typography variant="body1" sx={{fontWeight:800,overflowWrap:'anywhere'}}>{debt.lender}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {debt.debt_type} · {debt.status} · {debt.source_type.replace('_',' ')}
+            {isCard?'Credit card':'Loan'} · {debt.status} · {debt.source_type.replace('_',' ')}
           </Typography>
         </Box>
         <Chip size="small" color={debt.status==='active'?'primary':'default'} label={money(debt.outstanding_balance)}/>
@@ -200,12 +211,15 @@ export default function Debts(){
         rowGap:1.5,
         mt:1.5,
       }}>
-        <TextField label="Lender" value={editForm.lender} onChange={e=>setEditForm({...editForm,lender:e.target.value})}/>
-        <TextField label="Debt type" value={editForm.debt_type} onChange={e=>setEditForm({...editForm,debt_type:e.target.value})}/>
-        <TextField label="Principal" type="number" value={editForm.principal} onChange={e=>setEditForm({...editForm,principal:e.target.value})}/>
-        <TextField label="Outstanding" type="number" value={editForm.outstanding_balance} onChange={e=>setEditForm({...editForm,outstanding_balance:e.target.value})}/>
-        <TextField label="Interest rate %" type="number" value={editForm.interest_rate} onChange={e=>setEditForm({...editForm,interest_rate:e.target.value})}/>
-        <TextField label="EMI" type="number" value={editForm.emi_amount} onChange={e=>setEditForm({...editForm,emi_amount:e.target.value})}/>
+        <TextField label={isCard?'Card issuer / name':'Lender'} value={editForm.lender} onChange={e=>setEditForm({...editForm,lender:e.target.value})}/>
+        <TextField select label="Liability type" value={editForm.debt_type} onChange={e=>setEditForm({...editForm,debt_type:e.target.value})}>
+          <MenuItem value="loan">Loan</MenuItem>
+          <MenuItem value="credit_card">Credit card</MenuItem>
+        </TextField>
+        <TextField label={isCard?'Credit limit / original balance':'Principal'} type="number" value={editForm.principal} onChange={e=>setEditForm({...editForm,principal:e.target.value})}/>
+        <TextField label="Outstanding balance" type="number" value={editForm.outstanding_balance} onChange={e=>setEditForm({...editForm,outstanding_balance:e.target.value})}/>
+        <TextField label={isCard?'APR / interest rate %':'Interest rate %'} type="number" value={editForm.interest_rate} onChange={e=>setEditForm({...editForm,interest_rate:e.target.value})}/>
+        <TextField label={isCard?'Minimum due':'EMI'} type="number" value={editForm.emi_amount} onChange={e=>setEditForm({...editForm,emi_amount:e.target.value})}/>
         <TextField label="Start date" type="date" InputLabelProps={{shrink:true}} value={editForm.start_date} onChange={e=>setEditForm({...editForm,start_date:e.target.value})}/>
         <TextField label="End date" type="date" InputLabelProps={{shrink:true}} value={editForm.end_date} onChange={e=>setEditForm({...editForm,end_date:e.target.value})}/>
         <TextField label="Next due date" type="date" InputLabelProps={{shrink:true}} value={editForm.next_due_date} onChange={e=>setEditForm({...editForm,next_due_date:e.target.value})}/>
@@ -216,9 +230,9 @@ export default function Debts(){
         </Stack>
       </Box>:<>
         <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1.25,mt:1.4}}>
-          <Box><Typography variant="caption" color="text.secondary">Principal</Typography><Typography variant="body2" sx={{fontWeight:700}}>{money(debt.principal)}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">Rate</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">EMI</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.emi_amount!=null?money(debt.emi_amount):'—'}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">{isCard?'Limit / original':'Principal'}</Typography><Typography variant="body2" sx={{fontWeight:700}}>{money(debt.principal)}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">{isCard?'APR':'Rate'}</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</Typography></Box>
+          <Box><Typography variant="caption" color="text.secondary">{isCard?'Minimum due':'EMI'}</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.emi_amount!=null?money(debt.emi_amount):'—'}</Typography></Box>
           <Box><Typography variant="caption" color="text.secondary">Next due</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</Typography></Box>
         </Box>
         {debt.notes&&<Typography variant="body2" color="text.secondary" sx={{mt:1.1,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{debt.notes}</Typography>}
@@ -261,17 +275,18 @@ export default function Debts(){
   return <Stack spacing={{xs:1.4,sm:2}}>
     <Box>
       <Typography variant="overline" color="text.secondary">LIABILITIES</Typography>
-      <Typography variant="h1">Debt tracker</Typography>
+      <Typography variant="h1">Liability tracker</Typography>
       <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
-        Add and manage debts here. Loan-document imports are under Import → Debt.
+        Track loans and credit-card outstanding in one place. Loan-document imports are under Import → Debt.
       </Typography>
     </Box>
 
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'repeat(3,1fr)'},gap:1}}>
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',lg:'repeat(4,1fr)'},gap:1}}>
       {[
-        ['Outstanding',money(data.total_outstanding)],
-        ['Monthly EMI',money(data.monthly_emi)],
-        ['Active debts',String(data.active_count)],
+        ['Total outstanding',money(data.total_outstanding)],
+        ['Loan outstanding',money(data.loan_outstanding)],
+        ['Card outstanding',money(data.credit_card_outstanding)],
+        ['Monthly commitments',money(data.monthly_emi)],
       ].map(([label,value])=><Paper key={label} sx={{...clay,p:{xs:1.25,sm:1.6}}}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
         <Typography sx={{fontWeight:850,fontSize:'1.3rem',mt:.25}}>{value}</Typography>
@@ -284,7 +299,7 @@ export default function Debts(){
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'minmax(0,1fr) 340px'},gap:{xs:1.4,sm:2}}}>
       <Stack spacing={1.4}>
         <Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
-          <Typography variant="h2">Add debt manually</Typography>
+          <Typography variant="h2">Add loan or credit card</Typography>
           <Box sx={{
             display:'grid',
             gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},
@@ -292,23 +307,26 @@ export default function Debts(){
             rowGap:1.5,
             mt:1.5,
           }}>
-            <TextField label="Lender" value={form.lender} onChange={e=>setForm({...form,lender:e.target.value})}/>
-            <TextField label="Debt type" value={form.debt_type} onChange={e=>setForm({...form,debt_type:e.target.value})}/>
-            <TextField label="Principal" type="number" value={form.principal} onChange={e=>setForm({...form,principal:e.target.value})}/>
+            <TextField label={form.debt_type==='credit_card'?'Card issuer / name':'Lender'} value={form.lender} onChange={e=>setForm({...form,lender:e.target.value})}/>
+            <TextField select label="Liability type" value={form.debt_type} onChange={e=>setForm({...form,debt_type:e.target.value})}>
+              <MenuItem value="loan">Loan</MenuItem>
+              <MenuItem value="credit_card">Credit card</MenuItem>
+            </TextField>
+            <TextField label={form.debt_type==='credit_card'?'Credit limit / original balance (optional)':'Principal (optional)'} type="number" value={form.principal} onChange={e=>setForm({...form,principal:e.target.value})}/>
             <TextField label="Outstanding balance" type="number" value={form.outstanding_balance} onChange={e=>setForm({...form,outstanding_balance:e.target.value})}/>
-            <TextField label="Interest rate %" type="number" value={form.interest_rate} onChange={e=>setForm({...form,interest_rate:e.target.value})}/>
-            <TextField label="EMI" type="number" value={form.emi_amount} onChange={e=>setForm({...form,emi_amount:e.target.value})}/>
+            <TextField label={form.debt_type==='credit_card'?'APR / interest rate %':'Interest rate %'} type="number" value={form.interest_rate} onChange={e=>setForm({...form,interest_rate:e.target.value})}/>
+            <TextField label={form.debt_type==='credit_card'?'Minimum due':'EMI'} type="number" value={form.emi_amount} onChange={e=>setForm({...form,emi_amount:e.target.value})}/>
             <TextField label="Start date" type="date" InputLabelProps={{shrink:true}} value={form.start_date} onChange={e=>setForm({...form,start_date:e.target.value})}/>
             <TextField label="End date" type="date" InputLabelProps={{shrink:true}} value={form.end_date} onChange={e=>setForm({...form,end_date:e.target.value})}/>
             <TextField label="Next due date" type="date" InputLabelProps={{shrink:true}} value={form.next_due_date} onChange={e=>setForm({...form,next_due_date:e.target.value})}/>
             <TextField label="Notes" multiline minRows={2} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/>
           </Box>
-          <Button variant="contained" sx={{mt:1.5}} disabled={busy==='create'||!form.lender.trim()||!form.principal||!form.outstanding_balance} onClick={createDebt}>
-            {busy==='create'?'Saving…':'Add debt'}
+          <Button variant="contained" sx={{mt:1.5}} disabled={busy==='create'||!form.lender.trim()||!form.outstanding_balance} onClick={createDebt}>
+            {busy==='create'?'Saving…':form.debt_type==='credit_card'?'Add credit card':'Add loan'}
           </Button>
         </Paper>
 
-        <Typography variant="h2">Active debts</Typography>
+        <Typography variant="h2">Active liabilities</Typography>
         {active.map(debtCard)}
         {!active.length&&<Paper sx={{...clay,p:1.5}}><Typography variant="body2" color="text.secondary">No active debts yet.</Typography></Paper>}
 
@@ -322,14 +340,14 @@ export default function Debts(){
         <AutoAwesomeRoundedIcon color="primary"/>
         <Typography variant="h2" sx={{mt:.7}}>Finance guidance</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mt:.5}}>
-          Ledger AI can use your calculated income, spending, categories and debt totals to explain repayment pressure and suggest a practical finance plan.
+          Ledger AI can use your calculated income, spending, loan EMIs, credit-card outstanding and minimum dues to explain repayment pressure and suggest a practical finance plan.
         </Typography>
         <Button
           fullWidth
           variant="outlined"
           sx={{mt:1.3}}
           onClick={()=>{
-            sessionStorage.setItem('ledger_ai_prompt','How can I improve my finances and pay down my debt based on my income, spending and EMI commitments?')
+            sessionStorage.setItem('ledger_ai_prompt','How can I improve my finances and reduce my loans and credit-card outstanding based on my income, spending, EMIs and minimum dues?')
             navigate('/ai')
           }}
         >
