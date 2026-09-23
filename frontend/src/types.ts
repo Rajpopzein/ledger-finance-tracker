@@ -30,6 +30,8 @@ export type TransactionPage={
 }
 
 export type Summary={
+  opening_balance:number
+  new_income:number
   income:number
   spent:number
   available:number
@@ -37,7 +39,7 @@ export type Summary={
   total:number
   needs_review:number
   categories:{name:string;amount:number}[]
-  cashflow:{label:string;income:number;spent:number}[]
+  cashflow:{label:string;opening_balance:number;new_income:number;income:number;spent:number}[]
   family_spending:{id:number;handle:string;name:string;amount:number}[]
 }
 
@@ -72,4 +74,31 @@ export type DebtList={
   total_outstanding:number
   monthly_emi:number
   active_count:number
+}
+
+
+export type InvestmentHolding={
+  id:number
+  platform:string
+  asset_type:string
+  symbol:string
+  name?:string|null
+  isin?:string|null
+  quantity:number
+  average_price?:number|null
+  invested_amount:number
+  current_price?:number|null
+  current_value?:number|null
+  pnl?:number|null
+  as_of_date?:string|null
+  source_type:string
+  source_file_name?:string|null
+}
+
+export type InvestmentList={
+  items:InvestmentHolding[]
+  invested_amount:number
+  current_value:number
+  pnl:number
+  count:number
 }
