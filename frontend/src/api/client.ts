@@ -131,6 +131,7 @@ export const api={
  familyNetwork:()=>req<any>('/family-network'),
  linkFamily:(handle:string,label?:string)=>req<any>('/family-links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({handle,label:label||null})}),
  familyLinkAction:(linkId:number,action:'accept'|'reject')=>req<any>(`/family-links/${linkId}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
+ updateFamilySharing:(linkId:number,sharing:{transactions:boolean;debts:boolean;investments:boolean})=>req<any>(`/family-links/${linkId}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sharing)}),
  removeFamilyLink:(linkId:number)=>req<any>(`/family-links/${linkId}`,{method:'DELETE'}),
  cash:(body:any)=>req('/transactions/cash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  preview:(accountId:number,file:File,password?:string)=>{
