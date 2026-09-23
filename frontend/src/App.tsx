@@ -22,7 +22,16 @@ export default function App(){
 
   useEffect(()=>{refreshAuth()},[])
 
-  if(!auth)return <Box sx={{minHeight:'100dvh',display:'grid',placeItems:'center',bgcolor:'background.default'}}>
+  if(!auth)return <Box sx={{
+    minHeight:'100dvh',
+    display:'grid',
+    placeItems:'center',
+    bgcolor:'background.default',
+    pt:'var(--safe-area-top)',
+    pr:'var(--safe-area-right)',
+    pb:'var(--safe-area-bottom)',
+    pl:'var(--safe-area-left)',
+  }}>
     <Box sx={{textAlign:'center'}}><CircularProgress size={30}/><Typography color="text.secondary" sx={{mt:1.2}}>Checking secure session…</Typography></Box>
   </Box>
   if(!auth.authenticated)return <Auth setupRequired={!!auth.setup_required} onAuthenticated={refreshAuth}/>
