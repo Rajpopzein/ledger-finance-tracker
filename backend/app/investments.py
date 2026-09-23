@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import InvestmentHolding
 from .schemas import InvestmentCreate, InvestmentUpdate
+from .services.excel_security import unlock_excel
 from .users import current_user_id
 
 router = APIRouter()
@@ -93,8 +94,10 @@ def _rows_from_xls(content: bytes):
             rows.append(sheet.row_values(r))
     return rows
 
-def _read_rows(filename: str, content: bytes):
+def _read_rows(filename: str, content: bytes, password: str | None = None):
     lower = filename.lower()
+    if lower.endswith((".xlsx", ".xls")):
+        content = unlock_excel(filename, content, password)
     if lower.endswith(".csv"):
         return _rows_from_csv(content)
     if lower.endswith(".xlsx"):
@@ -119,8 +122,8 @@ def _cell(row, mapping, key):
         return None
     return row[idx]
 
-def parse_holdings(filename: str, content: bytes):
-    rows = _read_rows(filename, content)
+def parse_holdings(filename: str, content: bytes, password: str | None = None):
+    rows = _read_rows(filename, content, password)
     if not rows:
         raise ValueError("Investment file is empty")
 
@@ -320,12 +323,13 @@ async def preview_investments(
     request: Request,
     platform: str = Form(...),
     file: UploadFile = File(...),
+    password: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     current_user_id(request)
     content = await file.read()
     try:
-        rows = parse_holdings(file.filename or "holdings.csv", content)
+        rows = parse_holdings(file.filename or "holdings.csv", content, password)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     invested = sum((x["invested_amount"] for x in rows), Decimal("0"))
@@ -359,12 +363,13 @@ async def commit_investments(
     request: Request,
     platform: str = Form(...),
     file: UploadFile = File(...),
+    password: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
     content = await file.read()
     try:
-        rows = parse_holdings(file.filename or "holdings.csv", content)
+        rows = parse_holdings(file.filename or "holdings.csv", content, password)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
