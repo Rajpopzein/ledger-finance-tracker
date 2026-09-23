@@ -23,7 +23,8 @@
     "@emotion/react": "11.11.1",
     "@emotion/styled": "11.11.0",
     "@mui/icons-material": "5.15.7",
-    "@mui/material": "5.15.7"
+    "@mui/material": "5.15.7",
+    "@tauri-apps/plugin-http": "^2.5.2"
   },
   "devDependencies": {
     "@types/react": "18.2.79",
