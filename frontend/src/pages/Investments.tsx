@@ -187,10 +187,13 @@ export default function Investments(){
       </Paper>)}
     </Box>
 
+    {!canManage&&<Alert severity="info">
+      Viewing {scopeLabel} investments in read-only mode. Only holdings explicitly shared with you are returned.
+    </Alert>}
     {error&&<Alert severity="error">{error}</Alert>}
     {notice&&<Alert severity="success">{notice}</Alert>}
 
-    <Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
+    {canManage&&<Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
       <Typography variant="h2">Add investment manually</Typography>
       <Box sx={{
         display:'grid',
