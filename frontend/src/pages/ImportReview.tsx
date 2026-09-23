@@ -19,6 +19,8 @@ import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded'
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded'
 import {api} from '../api/client'
 import UPIImport from '../components/UPIImport'
+import DebtImport from '../components/DebtImport'
+import InvestmentImport from '../components/InvestmentImport'
 import {claySx,useUI} from '../ui'
 
 type ImportStage='idle'|'uploading'|'committing'|'reprocessing'
@@ -32,7 +34,7 @@ export default function ImportReview(){
   const [error,setError]=useState('')
   const [fileName,setFileName]=useState('')
   const [selectedFile,setSelectedFile]=useState<File|null>(null)
-  const [mode,setMode]=useState<'bank'|'upi'>('bank')
+  const [mode,setMode]=useState<'bank'|'upi'|'debt'|'investment'>('bank')
 
   const busy=stage!=='idle'
   const clay=claySx(resolvedMode)
@@ -97,14 +99,22 @@ export default function ImportReview(){
     </Box>
 
     <Paper sx={{...clay,p:.6,width:'fit-content',maxWidth:'100%'}}>
-      <Tabs value={mode} onChange={(_,value)=>setMode(value)} variant="fullWidth">
-        <Tab value="bank" label="Bank statement"/>
-        <Tab value="upi" label="UPI apps"/>
+      <Tabs
+        value={mode}
+        onChange={(_,value)=>setMode(value)}
+        variant="scrollable"
+        scrollButtons={false}
+        allowScrollButtonsMobile
+      >
+        <Tab value="bank" label="Bank"/>
+        <Tab value="upi" label="UPI"/>
+        <Tab value="debt" label="Debt"/>
+        <Tab value="investment" label="Investments"/>
       </Tabs>
     </Paper>
 
     {mode==='upi'?<UPIImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
-      <Stack spacing={{xs:1.15,sm:2}}>
+      <Stack spacing={{xs:1.5,sm:2}}>
         <Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
           {accounts.length? <Stack spacing={1.6}>
             <FormControl size="small">
@@ -172,7 +182,7 @@ export default function ImportReview(){
                   </Button>
                 </Stack>}
           </>:<>
-            <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1,mb:1.5}}>
+            <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1.5,mb:1.5}}>
               {[
                 ['FOUND',preview.detected],
                 ['NEW',preview.new],
@@ -199,7 +209,7 @@ export default function ImportReview(){
 
       <Paper sx={{...clay,p:{xs:1.4,sm:2},height:'fit-content'}}>
         <Typography variant="h2">Duplicate protection</Typography>
-        <Stack spacing={1.4} sx={{mt:1.6}}>
+        <Stack spacing={1.5} sx={{mt:1.6}}>
           {[
             'Normalize statement rows',
             'Match bank/UPI references',
