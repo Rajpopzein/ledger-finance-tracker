@@ -24,6 +24,11 @@ class FamilyLinkCreate(BaseModel):
 class FamilyLinkAction(BaseModel):
     action: str = Field(pattern="^(accept|reject)$")
 
+class FamilySharingUpdate(BaseModel):
+    transactions: bool
+    debts: bool
+    investments: bool
+
 class OwnerLogin(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
