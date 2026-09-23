@@ -308,19 +308,42 @@ export default function Debts(){
   }
 
   function liabilityTable(rows:Debt[],activeRows:boolean){
+    const widths={
+      liability:220,
+      owner:130,
+      type:120,
+      outstanding:145,
+      rate:110,
+      commitment:145,
+      due:135,
+      payment:225,
+      actions:230,
+    }
+    const fixed=(width:number)=>({width,minWidth:width,maxWidth:width})
+    const minWidth=
+      widths.liability+
+      (canManage?0:widths.owner)+
+      widths.type+
+      widths.outstanding+
+      widths.rate+
+      widths.commitment+
+      widths.due+
+      (activeRows&&canManage?widths.payment:0)+
+      (canManage?widths.actions:0)
+
     return <TableContainer component={Paper} sx={{...clay,overflowX:'auto'}}>
-      <Table size="small" sx={{minWidth:canManage?(activeRows?1120:760):860}}>
+      <Table size="small" sx={{minWidth,tableLayout:'fixed'}}>
         <TableHead>
           <TableRow>
-            <TableCell sx={{fontWeight:800}}>Liability</TableCell>
-            {!canManage&&<TableCell sx={{fontWeight:800}}>Owner</TableCell>}
-            <TableCell sx={{fontWeight:800}}>Type</TableCell>
-            <TableCell sx={{fontWeight:800}} align="right">Outstanding</TableCell>
-            <TableCell sx={{fontWeight:800}} align="right">Rate / APR</TableCell>
-            <TableCell sx={{fontWeight:800}} align="right">EMI / Min due</TableCell>
-            <TableCell sx={{fontWeight:800}}>Next due</TableCell>
-            {activeRows&&canManage&&<TableCell sx={{fontWeight:800,minWidth:210}}>Record payment</TableCell>}
-            {canManage&&<TableCell sx={{fontWeight:800,minWidth:190}}>Actions</TableCell>}
+            <TableCell sx={{fontWeight:800,...fixed(widths.liability)}}>Liability</TableCell>
+            {!canManage&&<TableCell sx={{fontWeight:800,...fixed(widths.owner)}}>Owner</TableCell>}
+            <TableCell sx={{fontWeight:800,...fixed(widths.type)}}>Type</TableCell>
+            <TableCell sx={{fontWeight:800,...fixed(widths.outstanding)}} align="right">Outstanding</TableCell>
+            <TableCell sx={{fontWeight:800,...fixed(widths.rate)}} align="right">Rate / APR</TableCell>
+            <TableCell sx={{fontWeight:800,...fixed(widths.commitment)}} align="right">EMI / Min due</TableCell>
+            <TableCell sx={{fontWeight:800,...fixed(widths.due)}}>Next due</TableCell>
+            {activeRows&&canManage&&<TableCell sx={{fontWeight:800,...fixed(widths.payment)}}>Record payment</TableCell>}
+            {canManage&&<TableCell sx={{fontWeight:800,...fixed(widths.actions)}}>Actions</TableCell>}
           </TableRow>
         </TableHead>
         <TableBody>
@@ -328,26 +351,26 @@ export default function Debts(){
             const isCard=debt.debt_type==='credit_card'
             const recentPayment=debt.payments?.[0]
             return <TableRow key={debt.id} hover>
-              <TableCell>
-                <Typography variant="body2" fontWeight={800}>{debt.lender}</Typography>
+              <TableCell sx={fixed(widths.liability)}>
+                <Typography variant="body2" fontWeight={800} noWrap title={debt.lender}>{debt.lender}</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {debt.source_type.replace('_',' ')}
                   {recentPayment?` · last payment ${money(recentPayment.amount)}`:''}
                 </Typography>
               </TableCell>
-              {!canManage&&<TableCell>
-                <Typography variant="body2" fontWeight={700}>{ownerName(debt.user_id)}</Typography>
+              {!canManage&&<TableCell sx={fixed(widths.owner)}>
+                <Typography variant="body2" fontWeight={700} noWrap>{ownerName(debt.user_id)}</Typography>
               </TableCell>}
-              <TableCell>
+              <TableCell sx={fixed(widths.type)}>
                 <Chip size="small" variant="outlined" label={isCard?'Credit card':'Loan'}/>
               </TableCell>
-              <TableCell align="right">
+              <TableCell sx={fixed(widths.outstanding)} align="right">
                 <Typography variant="body2" fontWeight={800}>{money(debt.outstanding_balance)}</Typography>
               </TableCell>
-              <TableCell align="right">{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</TableCell>
-              <TableCell align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
-              <TableCell>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
-              {activeRows&&canManage&&<TableCell>
+              <TableCell sx={fixed(widths.rate)} align="right">{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</TableCell>
+              <TableCell sx={fixed(widths.commitment)} align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
+              <TableCell sx={fixed(widths.due)}>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
+              {activeRows&&canManage&&<TableCell sx={fixed(widths.payment)}>
                 <Stack direction="row" spacing={0.75} alignItems="center">
                   <TextField
                     size="small"
@@ -369,8 +392,8 @@ export default function Debts(){
                   </Button>
                 </Stack>
               </TableCell>}
-              {canManage&&<TableCell>
-                <Stack direction="row" spacing={0.5}>
+              {canManage&&<TableCell sx={fixed(widths.actions)}>
+                <Stack direction="row" spacing={0.5} sx={{whiteSpace:'nowrap'}}>
                   <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(debt)}>Edit</Button>
                   {activeRows&&<Button size="small" disabled={busy==='close:'+debt.id} onClick={()=>closeDebt(debt)}>Close</Button>}
                   <Button
