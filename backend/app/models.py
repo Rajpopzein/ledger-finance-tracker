@@ -44,6 +44,34 @@ class FamilySharingPreference(Base):
     share_investments: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class FamilyAISharingPreference(Base):
+    __tablename__ = "family_ai_sharing_preferences"
+    __table_args__ = (
+        UniqueConstraint("family_link_id", "owner_user_id", name="uq_family_ai_sharing_link_owner"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    family_link_id: Mapped[int] = mapped_column(ForeignKey("family_links.id", ondelete="CASCADE"), index=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    share_ai_insights: Mapped[bool] = mapped_column(Boolean, default=False)
+    share_ai_categorization: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AIConversation(Base):
+    __tablename__ = "ai_conversations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(120))
+    question: Mapped[str] = mapped_column(Text)
+    response: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    family_scope: Mapped[str] = mapped_column(String(20), default="self")
+    family_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    period_from: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    period_to: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
 class Owner(Base):
     __tablename__ = "owners"
     id: Mapped[int] = mapped_column(primary_key=True)
