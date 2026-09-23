@@ -16,6 +16,8 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import type {InvestmentHolding,InvestmentList} from '../types'
 import {api} from '../api/client'
+import {useFamily} from '../family'
+import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n)
@@ -33,7 +35,10 @@ const emptyForm=()=>({
 
 export default function Investments(){
   const {resolvedMode}=useUI()
+  const {familyScope,familyUserId,scopeLabel,linkedUsers}=useFamily()
+  const {auth}=useAppData()
   const clay=claySx(resolvedMode)
+  const canManage=familyScope==='self'&&!familyUserId
   const [data,setData]=useState<InvestmentList>({items:[],invested_amount:0,current_value:0,pnl:0,count:0})
   const [form,setForm]=useState(emptyForm())
   const [editId,setEditId]=useState<number|null>(null)
@@ -43,11 +48,15 @@ export default function Investments(){
   const [notice,setNotice]=useState('')
 
   async function load(){
-    try{setData(await api.investments())}
-    catch(e:any){setError(e.message||'Could not load investments.')}
+    setError('')
+    try{setData(await api.investments(familyScope,familyUserId))}
+    catch(e:any){
+      setData({items:[],invested_amount:0,current_value:0,pnl:0,count:0})
+      setError(e.message||'Could not load investments.')
+    }
   }
 
-  useEffect(()=>{load()},[])
+  useEffect(()=>{load()},[familyScope,familyUserId])
 
   async function addManual(){
     if(!form.symbol.trim())return
@@ -153,6 +162,11 @@ export default function Investments(){
     return groups
   },[data.items])
 
+  const ownerName=(userId?:number)=>{
+    if(userId===auth?.user_id)return 'You'
+    return linkedUsers.find(user=>user.id===userId)?.name||'Family'
+  }
+
   return <Stack spacing={{xs:1.4,sm:2}}>
     <Box>
       <Typography variant="overline" color="text.secondary">PORTFOLIO</Typography>
@@ -198,7 +212,7 @@ export default function Investments(){
       <Button variant="contained" startIcon={<AddRoundedIcon/>} sx={{mt:1.5}} onClick={addManual} disabled={busy==='manual'||!form.symbol.trim()}>
         {busy==='manual'?'Saving…':'Add investment'}
       </Button>
-    </Paper>
+    </Paper>}
 
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:1}}>
@@ -234,14 +248,16 @@ export default function Investments(){
                   </Stack>
                 </Box>:<Box sx={{
                   display:'grid',
-                  gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(0,1.4fr) .7fr .8fr .8fr auto'},
+                  gridTemplateColumns:canManage
+                    ? {xs:'minmax(0,1fr) auto',sm:'minmax(0,1.4fr) .7fr .8fr .8fr auto'}
+                    : {xs:'minmax(0,1fr) auto',sm:'minmax(0,1.4fr) .7fr .8fr .8fr'},
                   gap:1,
                   alignItems:'center',
                 }}>
                   <Box sx={{minWidth:0}}>
                     <Typography variant="body2" sx={{fontWeight:800,overflowWrap:'anywhere'}}>{item.symbol}</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{display:'block',overflowWrap:'anywhere'}}>
-                      {item.name||item.asset_type} · {item.quantity.toLocaleString('en-IN')} units
+                      {item.name||item.asset_type} · {item.quantity.toLocaleString('en-IN')} units{!canManage?' · '+ownerName(item.user_id):''}
                     </Typography>
                   </Box>
                   <Box sx={{display:{xs:'none',sm:'block'}}}>
@@ -258,10 +274,10 @@ export default function Investments(){
                       {(item.pnl??0)>=0?'+':''}{money(item.pnl??0)}
                     </Typography>
                   </Box>
-                  <Stack direction="row" spacing={.5} sx={{gridColumn:{xs:'1 / -1',sm:'auto'},justifySelf:{xs:'start',sm:'end'}}}>
+                  {canManage&&<Stack direction="row" spacing={0.5} sx={{gridColumn:{xs:'1 / -1',sm:'auto'},justifySelf:{xs:'start',sm:'end'}}}>
                     <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(item)}>Edit</Button>
                     <Button size="small" color="error" startIcon={<DeleteOutlineRoundedIcon/>} disabled={busy==='delete:'+item.id} onClick={()=>remove(item)}>Delete</Button>
-                  </Stack>
+                  </Stack>}
                 </Box>}
               </Box>
             })}
