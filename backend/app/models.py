@@ -31,6 +31,19 @@ class FamilyLink(Base):
     target_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
+class FamilySharingPreference(Base):
+    __tablename__ = "family_sharing_preferences"
+    __table_args__ = (
+        UniqueConstraint("family_link_id", "owner_user_id", name="uq_family_sharing_link_owner"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    family_link_id: Mapped[int] = mapped_column(ForeignKey("family_links.id", ondelete="CASCADE"), index=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    share_transactions: Mapped[bool] = mapped_column(Boolean, default=True)
+    share_debts: Mapped[bool] = mapped_column(Boolean, default=True)
+    share_investments: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class Owner(Base):
     __tablename__ = "owners"
     id: Mapped[int] = mapped_column(primary_key=True)
