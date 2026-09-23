@@ -35,6 +35,11 @@ export type Summary={
   income:number
   spent:number
   available:number
+  liquid_balance:number
+  investment_value:number
+  debt_outstanding:number
+  debt_count:number
+  net_worth:number
   verified:number
   total:number
   needs_review:number
