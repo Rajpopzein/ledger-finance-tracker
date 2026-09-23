@@ -8,11 +8,13 @@ type AppDataContextValue={
   accounts:any[]
   categories:any[]
   aiSettings:any
+  aiCapabilities:any
   loading:boolean
   error:string
   refreshAccounts:()=>Promise<void>
   refreshCategories:()=>Promise<void>
   refreshAISettings:()=>Promise<void>
+  refreshAICapabilities:()=>Promise<void>
   refreshBootstrap:()=>Promise<void>
 }
 
@@ -23,6 +25,7 @@ export function AppDataProvider({auth,children}:{auth:any;children:ReactNode}){
   const [accounts,setAccounts]=useState<any[]>([])
   const [categories,setCategories]=useState<any[]>([])
   const [aiSettings,setAISettings]=useState<any>({status:'not_configured'})
+  const [aiCapabilities,setAICapabilities]=useState<any>({providers:[]})
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
 
@@ -34,6 +37,7 @@ export function AppDataProvider({auth,children}:{auth:any;children:ReactNode}){
       setAccounts(data.accounts||[])
       setCategories(data.categories||[])
       setAISettings(data.ai_settings||{status:'not_configured'})
+      setAICapabilities(data.ai_capabilities||{providers:[]})
       if(data.preferences)hydratePreferences(data.preferences)
     }catch(e:any){
       setError(e.message||'Could not load application data.')
@@ -53,8 +57,14 @@ export function AppDataProvider({auth,children}:{auth:any;children:ReactNode}){
   }
 
   async function refreshAISettings(){
-    const settings=await api.aiSettings()
+    const [settings,capabilities]=await Promise.all([api.aiSettings(),api.aiCapabilities()])
     setAISettings(settings)
+    setAICapabilities(capabilities||{providers:[]})
+  }
+
+  async function refreshAICapabilities(){
+    const capabilities=await api.aiCapabilities()
+    setAICapabilities(capabilities||{providers:[]})
   }
 
   useEffect(()=>{refreshBootstrap()},[auth?.user_id])
@@ -64,13 +74,15 @@ export function AppDataProvider({auth,children}:{auth:any;children:ReactNode}){
     accounts,
     categories,
     aiSettings,
+    aiCapabilities,
     loading,
     error,
     refreshAccounts,
     refreshCategories,
     refreshAISettings,
+    refreshAICapabilities,
     refreshBootstrap,
-  }),[auth,accounts,categories,aiSettings,loading,error])
+  }),[auth,accounts,categories,aiSettings,aiCapabilities,loading,error])
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
 }
