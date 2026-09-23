@@ -160,6 +160,46 @@ def _classify(db: Session, user_id: int, row):
 
     return None, "new", 0.0, "new"
 
+def _mark_self_transfer_counterpart(db: Session, user_id: int, row, matched: Transaction | None = None):
+    if row.get("txn_type") != "internal_transfer":
+        return
+
+    if matched is not None:
+        matched.txn_type = "internal_transfer"
+
+    # Google Pay can represent a self-transfer as one outgoing UPI row while the
+    # receiving bank account independently contains the matching credit. Only
+    # reclassify that credit when the destination hint resolves to exactly one
+    # owned account and exactly one amount/date candidate exists.
+    destination_hint = row.get("destination_account_hint")
+    if not destination_hint:
+        return
+
+    accounts = [
+        account for account in _user_accounts(db, user_id)
+        if not (account.type == "upi" and account.institution == "UPI")
+    ]
+    destination_accounts = _accounts_for_hint(accounts, destination_hint)
+    if len(destination_accounts) != 1:
+        return
+
+    destination = destination_accounts[0]
+    start = row["txn_at"] - timedelta(days=1)
+    end = row["txn_at"] + timedelta(days=1)
+    candidates = db.scalars(
+        select(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.account_id == destination.id,
+            Transaction.direction == "credit",
+            Transaction.amount == row["amount"],
+            Transaction.txn_at >= start,
+            Transaction.txn_at <= end,
+        )
+    ).all()
+    candidates = [tx for tx in candidates if matched is None or tx.id != matched.id]
+    if len(candidates) == 1:
+        candidates[0].txn_type = "internal_transfer"
+
 def _parse(app: str, file: UploadFile, content: bytes):
     try:
         label = app_label(app)
@@ -305,6 +345,7 @@ async def commit_upi(
                 match.upi_ref = row["upi_ref"]
             if not match.payment_method:
                 match.payment_method = "upi"
+            _mark_self_transfer_counterpart(db, user_id, row, match)
             linked += 1
             continue
 
@@ -344,6 +385,7 @@ async def commit_upi(
             )
         )
         db.add(tx)
+        _mark_self_transfer_counterpart(db, user_id, row)
         inserted += 1
 
     db.commit()
