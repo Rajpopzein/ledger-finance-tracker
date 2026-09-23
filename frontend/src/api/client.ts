@@ -1,13 +1,35 @@
-const IS_NATIVE_APP=Boolean(import.meta.env.TAURI_ENV_PLATFORM)
+const IS_NATIVE_APP=
+  Boolean(import.meta.env.TAURI_ENV_PLATFORM)||
+  (typeof window!=='undefined'&&(
+    window.location.protocol==='tauri:'||
+    window.location.hostname==='tauri.localhost'
+  ))
+
 const API=import.meta.env.VITE_API_URL || (IS_NATIVE_APP?'https://ledger-finance-raj-api.onrender.com/api':'/api')
 
 const SESSION_KEY='ledger_session_token'
+
+async function ledgerFetch(input:string,init?:RequestInit):Promise<Response>{
+  if(IS_NATIVE_APP){
+    const {fetch:nativeFetch}=await import('@tauri-apps/plugin-http')
+    return nativeFetch(input,init)
+  }
+  return fetch(input,{...init,credentials:'include'})
+}
 
 async function req<T>(path:string,init?:RequestInit):Promise<T>{
   const token=localStorage.getItem(SESSION_KEY)
   const headers=new Headers(init?.headers||{})
   if(token)headers.set('Authorization',`Bearer ${token}`)
-  const r=await fetch(API+path,{...init,headers,credentials:'include'})
+  let r:Response
+  try{
+    r=await ledgerFetch(API+path,{...init,headers})
+  }catch(error:any){
+    const message=IS_NATIVE_APP
+      ? 'Cannot reach the Ledger API from this app. Check your internet connection and try again.'
+      : (error?.message||'Network request failed')
+    throw new Error(message)
+  }
   const raw=await r.text()
 
   let body:any=null
