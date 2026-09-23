@@ -322,7 +322,7 @@ export default function Debts(){
               <TableCell align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
               <TableCell>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
               {activeRows&&<TableCell>
-                <Stack direction="row" spacing={0.7}5 alignItems="center">
+                <Stack direction="row" spacing={0.75} alignItems="center">
                   <TextField
                     size="small"
                     type="number"
