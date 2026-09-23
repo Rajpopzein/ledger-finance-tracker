@@ -83,7 +83,10 @@ export default function Auth({setupRequired,onAuthenticated}:{setupRequired:bool
     display:'grid',
     placeItems:'center',
     bgcolor:'background.default',
-    p:2,
+    pt:'calc(16px + var(--safe-area-top))',
+    pr:'calc(16px + var(--safe-area-right))',
+    pb:'calc(16px + var(--safe-area-bottom))',
+    pl:'calc(16px + var(--safe-area-left))',
   }}>
     <Paper sx={{...claySx(resolvedMode),width:'100%',maxWidth:440,p:{xs:1.6,sm:2.5}}}>
       <Stack direction="row" alignItems="center" spacing={1.2} sx={{mb:2}}>
