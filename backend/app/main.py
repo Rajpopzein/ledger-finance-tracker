@@ -25,7 +25,7 @@ from .bank_imports import router as bank_imports_router
 from .finance_features import router as finance_features_router
 from .shortcuts import router as shortcuts_router
 from .investments import router as investments_router
-from .users import router as users_router, linked_user_ids, current_user_id
+from .users import router as users_router, current_user_id, scoped_family_user_ids
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -311,20 +311,15 @@ def _scope_user_ids(
     db:Session,
     family_scope:str="self",
     family_user_id:int|None=None,
+    resource:str="transactions",
 ):
-    user_id=current_user_id(request)
-    linked=linked_user_ids(db,user_id)
-    if family_user_id is not None:
-        if family_user_id not in linked:
-            raise HTTPException(403,"That user is not linked to your family")
-        return [family_user_id]
-    if family_scope=="self":
-        return [user_id]
-    if family_scope=="family":
-        return linked or [-1]
-    if family_scope=="all":
-        return [user_id,*linked]
-    raise HTTPException(400,"family_scope must be self, family or all")
+    return scoped_family_user_ids(
+        db,
+        current_user_id(request),
+        family_scope,
+        family_user_id,
+        resource,
+    )
 
 @app.get("/api/transactions")
 def transactions(
@@ -341,7 +336,7 @@ def transactions(
     page_size:int=25,
     db:Session=Depends(get_db),
 ):
-    user_ids=_scope_user_ids(request,db,family_scope,family_user_id)
+    user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"transactions")
     page=max(1,page)
     page_size=max(10,min(100,page_size))
     stmt=_filtered_stmt(from_date,to_date,user_ids)
@@ -546,10 +541,12 @@ def summary(
     family_user_id:int|None=None,
     db:Session=Depends(get_db),
 ):
-    user_ids=_scope_user_ids(request,db,family_scope,family_user_id)
+    transaction_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"transactions")
+    debt_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"debts")
+    investment_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"investments")
 
     items=db.scalars(
-        _filtered_stmt(from_date,to_date,user_ids)
+        _filtered_stmt(from_date,to_date,transaction_user_ids)
         .where(Transaction.excluded_from_analytics==False)
     ).all()
     new_income=sum((t.amount for t in items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
@@ -559,7 +556,7 @@ def summary(
     opening_cash_outflow=Decimal("0")
     if from_date is not None:
         opening_items=db.scalars(
-            _filtered_stmt(None,from_date-timedelta(days=1),user_ids)
+            _filtered_stmt(None,from_date-timedelta(days=1),transaction_user_ids)
             .where(Transaction.excluded_from_analytics==False)
         ).all()
         opening_income=sum((t.amount for t in opening_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
@@ -582,14 +579,14 @@ def summary(
 
     debt_rows=db.scalars(
         select(Debt).where(
-            Debt.user_id.in_(user_ids),
+            Debt.user_id.in_(debt_user_ids),
             Debt.status!="closed",
         )
     ).all()
     debt_outstanding=sum((d.outstanding_balance for d in debt_rows),Decimal("0"))
 
     investment_rows=db.scalars(
-        select(InvestmentHolding).where(InvestmentHolding.user_id.in_(user_ids))
+        select(InvestmentHolding).where(InvestmentHolding.user_id.in_(investment_user_ids))
     ).all()
     investment_value=sum((
         holding.current_value
@@ -617,13 +614,13 @@ def summary(
             _filtered_stmt(
                 month_start,
                 next_month-timedelta(days=1),
-                user_ids,
+                transaction_user_ids,
             ).where(Transaction.excluded_from_analytics==False)
         ).all()
         m_new_income=sum((t.amount for t in month_items if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
         m_spent=sum((t.amount for t in month_items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
         before_month=db.scalars(
-            _filtered_stmt(None,month_start-timedelta(days=1),user_ids)
+            _filtered_stmt(None,month_start-timedelta(days=1),transaction_user_ids)
             .where(Transaction.excluded_from_analytics==False)
         ).all()
         m_opening_income=sum((t.amount for t in before_month if t.direction=="credit" and t.txn_type!="internal_transfer"),Decimal("0"))
@@ -640,7 +637,7 @@ def summary(
             "spent":float(m_spent),
         })
     family_items=db.scalars(
-        _filtered_stmt(from_date,to_date,_scope_user_ids(request,db,"all",None))
+        _filtered_stmt(from_date,to_date,_scope_user_ids(request,db,"all",None,"transactions"))
         .where(Transaction.excluded_from_analytics==False)
     ).all()
     family_totals=defaultdict(Decimal)
