@@ -1,0 +1,67 @@
+name: Validate Native Login Fix
+
+on:
+  push:
+    branches:
+      - fix-native-apk-login-20260923
+
+concurrency:
+  group: validate-native-login-fix
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Configure Android SDK and NDK
+        shell: bash
+        run: |
+          ANDROID_SDK_ROOT="/usr/local/lib/android/sdk"
+          SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build web frontend
+        run: npm run build
+
+      - name: Generate native icons
+        run: npm run app:icons
+
+      - name: Initialize Android target
+        run: npm run tauri android init -- --ci
+
+      - name: Build Android debug APK
+        run: npm run tauri android build -- --debug --apk --target aarch64
+
+      - name: Upload fixed login APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-android-0.1.1-login-fix
+          path: frontend/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
