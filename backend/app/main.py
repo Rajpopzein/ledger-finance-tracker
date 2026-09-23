@@ -229,6 +229,65 @@ def create_account(body:AccountCreate, request:Request, db:Session=Depends(get_d
     db.add(account); db.commit(); db.refresh(account)
     return {"id":account.id,"name":account.name,"institution":account.institution,"mask":account.account_mask,"type":account.type}
 
+def _delete_bank_account_with_history(
+    db:Session,
+    user_id:int,
+    account_id:int,
+    delete_transactions:bool,
+):
+    account=db.get(Account,account_id)
+    if not account or account.user_id!=user_id:
+        raise HTTPException(404,"Bank account not found")
+    if account.type!="bank":
+        raise HTTPException(400,"Only bank accounts can be removed here")
+    if not delete_transactions:
+        raise HTTPException(
+            400,
+            "Deleting a bank account also permanently deletes all transaction history for that account. Confirm delete_transactions=true to continue.",
+        )
+
+    transactions=db.scalars(
+        select(Transaction).where(
+            Transaction.user_id==user_id,
+            Transaction.account_id==account.id,
+        )
+    ).all()
+    previews=db.scalars(
+        select(ImportPreview).where(ImportPreview.account_id==account.id)
+    ).all()
+    batches=db.scalars(
+        select(ImportBatch).where(ImportBatch.account_id==account.id)
+    ).all()
+
+    transaction_count=len(transactions)
+    for preview in previews:
+        db.delete(preview)
+    for batch in batches:
+        db.delete(batch)
+    for transaction in transactions:
+        db.delete(transaction)
+    db.delete(account)
+    db.commit()
+    return {
+        "ok":True,
+        "account_id":account_id,
+        "deleted_transactions":transaction_count,
+    }
+
+@app.delete("/api/accounts/{account_id}")
+def delete_account(
+    account_id:int,
+    request:Request,
+    delete_transactions:bool=False,
+    db:Session=Depends(get_db),
+):
+    return _delete_bank_account_with_history(
+        db,
+        current_user_id(request),
+        account_id,
+        delete_transactions,
+    )
+
 DEFAULT_CATEGORIES=["Food & Dining","Fuel","Groceries","EMI & Loans","Shopping","Bills & Subscriptions","Travel","Health","Payroll","Investments","Other"]
 
 def _serialize_accounts(rows):
