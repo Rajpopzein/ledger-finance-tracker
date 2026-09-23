@@ -292,14 +292,31 @@ def list_debts(request: Request, db: Session = Depends(get_db)):
         (d.outstanding_balance for d in debts if d.status == "active"),
         Decimal("0"),
     )
-    monthly_emi = sum(
-        (d.emi_amount or Decimal("0") for d in debts if d.status == "active"),
+    loan_outstanding = sum(
+        (d.outstanding_balance for d in debts if d.status == "active" and d.debt_type != "credit_card"),
         Decimal("0"),
     )
+    credit_card_outstanding = sum(
+        (d.outstanding_balance for d in debts if d.status == "active" and d.debt_type == "credit_card"),
+        Decimal("0"),
+    )
+    monthly_loan_emi = sum(
+        (d.emi_amount or Decimal("0") for d in debts if d.status == "active" and d.debt_type != "credit_card"),
+        Decimal("0"),
+    )
+    monthly_card_minimum_due = sum(
+        (d.emi_amount or Decimal("0") for d in debts if d.status == "active" and d.debt_type == "credit_card"),
+        Decimal("0"),
+    )
+    monthly_emi = monthly_loan_emi + monthly_card_minimum_due
     return {
         "items": [_serialize_debt(d, by_debt.get(d.id, [])) for d in debts],
         "total_outstanding": float(total_outstanding),
+        "loan_outstanding": float(loan_outstanding),
+        "credit_card_outstanding": float(credit_card_outstanding),
         "monthly_emi": float(monthly_emi),
+        "monthly_loan_emi": float(monthly_loan_emi),
+        "monthly_card_minimum_due": float(monthly_card_minimum_due),
         "active_count": sum(1 for d in debts if d.status == "active"),
     }
 
