@@ -113,7 +113,7 @@ export default function ImportReview(){
       </Tabs>
     </Paper>
 
-    {mode==='upi'?<UPIImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
+    {mode==='upi'?<UPIImport/>:mode==='debt'?<DebtImport/>:mode==='investment'?<InvestmentImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
       <Stack spacing={{xs:1.5,sm:2}}>
         <Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
           {accounts.length? <Stack spacing={1.6}>
