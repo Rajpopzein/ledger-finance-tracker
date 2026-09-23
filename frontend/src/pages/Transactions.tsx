@@ -41,6 +41,7 @@ export default function Transactions(){
   const [accountId,setAccountId]=useState('')
   const [direction,setDirection]=useState('')
   const [accounts,setAccounts]=useState<any[]>([])
+  const [categories,setCategories]=useState<any[]>([])
   const [data,setData]=useState<TransactionPage>({items:[],page:1,page_size:25,total:0,pages:1})
   const [expandedId,setExpandedId]=useState<number|null>(null)
   const [page,setPage]=useState(1)
@@ -60,6 +61,7 @@ export default function Transactions(){
 
   useEffect(()=>{
     api.accounts().then(setAccounts).catch(()=>setAccounts([]))
+    api.categories().then(setCategories).catch(()=>setCategories([]))
   },[])
 
   async function load(){
@@ -102,6 +104,19 @@ export default function Transactions(){
       await load()
     }catch(e:any){
       setError(e.message||'Could not categorize these transactions.')
+    }finally{
+      setAiBusy(false)
+    }
+  }
+
+  async function changeCategory(tx:Tx,category:string){
+    setAiBusy(true);setNotice('');setError('')
+    try{
+      await api.setTransactionCategory(tx.id,category)
+      setNotice('Transaction category updated.')
+      await load()
+    }catch(e:any){
+      setError(e.message||'Could not update this category.')
     }finally{
       setAiBusy(false)
     }
@@ -272,13 +287,28 @@ export default function Transactions(){
           <Collapse in={expandedId===t.id} timeout="auto" unmountOnExit>
             <Box sx={{
               mx:{xs:.5,sm:1},
+              mt:{xs:.75,sm:1},
               mb:1,
               p:{xs:1.1,sm:1.35},
               bgcolor:'action.hover',
               borderRadius:1.4,
             }}>
-              <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1}}>
-                <Box><Typography variant="caption" color="text.secondary">Category</Typography><Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.category}</Typography></Box>
+              <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'repeat(4,1fr)'},gap:1}}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">Category</Typography>
+                  {canCategorize
+                    ? <FormControl size="small" fullWidth sx={{mt:.4}}>
+                        <Select
+                          value={t.category}
+                          onChange={e=>changeCategory(t,String(e.target.value))}
+                          disabled={aiBusy}
+                        >
+                          {categories.map((cat:any)=><MenuItem key={cat.name} value={cat.name}>{cat.name}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                    : <Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.category}</Typography>
+                  }
+                </Box>
                 <Box><Typography variant="caption" color="text.secondary">Account</Typography><Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.account}</Typography></Box>
                 <Box><Typography variant="caption" color="text.secondary">User</Typography><Typography variant="body2" sx={{fontWeight:700}}>{t.user?.name||'Unknown'}</Typography></Box>
                 <Box><Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2" sx={{fontWeight:700}}>{t.verification_status.replace('_',' ')}</Typography></Box>
