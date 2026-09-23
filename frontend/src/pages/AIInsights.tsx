@@ -14,18 +14,18 @@ import {api} from '../api/client'
 import {usePeriod} from '../period'
 import {claySx,useUI} from '../ui'
 import FinanceResponse,{FinanceHighlights} from '../components/FinanceResponse'
+import {useAppData} from '../appData'
 
 export default function AIInsights(){
   const {period}=usePeriod()
   const {resolvedMode}=useUI()
-  const [settings,setSettings]=useState<any>({status:'not_configured'})
+  const {aiSettings:settings}=useAppData()
   const [q,setQ]=useState(()=>sessionStorage.getItem('ledger_ai_prompt')||'Where did I spend more this month?')
   const [answer,setAnswer]=useState('')
   const [calculated,setCalculated]=useState<any>(null)
   const [busy,setBusy]=useState(false)
 
   useEffect(()=>{
-    api.aiSettings().then(setSettings)
     const saved=sessionStorage.getItem('ledger_ai_prompt')
     if(saved){
       setQ(saved)
