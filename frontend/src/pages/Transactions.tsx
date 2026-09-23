@@ -447,8 +447,11 @@ export default function Transactions(){
       open={addOpen}
       onClose={()=>setAddOpen(false)}
       onSaved={async()=>{
-        setPage(1)
-        await load()
+        if(page===1){
+          await load()
+        }else{
+          setPage(1)
+        }
       }}
     />
   </Stack>
