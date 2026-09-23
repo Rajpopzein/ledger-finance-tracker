@@ -620,7 +620,7 @@ def summary(
         "new_income":float(new_income),
         "income":float(income),
         "spent":float(spent),
-        "available":float(new_income-spent),
+        "available":float(max(Decimal("0"),new_income-spent)),
         "liquid_balance":float(liquid_balance),
         "investment_value":float(investment_value),
         "debt_outstanding":float(debt_outstanding),
@@ -794,11 +794,32 @@ async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
     debts=db.scalars(
         select(Debt).where(Debt.user_id==user_id,Debt.status=="active").order_by(Debt.created_at.desc())
     ).all()
+    period_income=float(data["new_income"])
+    period_spending=float(data["spent"])
+    period_cash_flow=period_income-period_spending
+    category_rows=[]
+    for category in data["categories"][:10]:
+        amount=float(category["amount"])
+        category_rows.append({
+            "name":category["name"],
+            "amount":amount,
+            "share_percent":round((amount/period_spending*100),1) if period_spending>0 else 0.0,
+        })
+
     safe={
-        "income":data["income"],
-        "spent":data["spent"],
-        "available":data["available"],
-        "categories":data["categories"][:10],
+        "period":{
+            "from":body.from_date.isoformat() if body.from_date else None,
+            "to":body.to_date.isoformat() if body.to_date else None,
+        },
+        "period_income":period_income,
+        "period_spending":period_spending,
+        "period_cash_flow":period_cash_flow,
+        "available":max(0.0,period_cash_flow),
+        "overspent_by":max(0.0,-period_cash_flow),
+        "opening_balance_reconstructed":float(data["opening_balance"]),
+        "investment_value":float(data["investment_value"]),
+        "estimated_net_worth":float(data["net_worth"]),
+        "categories":category_rows,
         "debt":{
             "total_outstanding":float(sum((d.outstanding_balance for d in debts),Decimal("0"))),
             "monthly_emi":float(sum((d.emi_amount or Decimal("0") for d in debts),Decimal("0"))),
@@ -814,6 +835,12 @@ async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
                 for d in debts[:20]
             ],
         },
+        "data_notes":[
+            "period_income contains only credit transactions recorded by Ledger inside the selected period; it may not represent all real-world income if imports are incomplete.",
+            "opening_balance_reconstructed is historical ledger carry-forward and must not be described as current-period income.",
+            "category totals describe recorded transactions and are not proof that a scheduled EMI was paid, missed, late or partial.",
+            "available is floored at zero; overspent_by carries any negative period cash-flow amount.",
+        ],
     }
     try: answer=await ask_model(db,user_id,body.question,safe)
     except Exception as e: raise HTTPException(400,str(e))
