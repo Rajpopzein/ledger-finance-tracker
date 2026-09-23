@@ -312,6 +312,7 @@ def _scope_user_ids(
     family_scope:str="self",
     family_user_id:int|None=None,
     resource:str="transactions",
+    allow_empty_unshared:bool=False,
 ):
     return scoped_family_user_ids(
         db,
@@ -319,6 +320,7 @@ def _scope_user_ids(
         family_scope,
         family_user_id,
         resource,
+        allow_empty_unshared,
     )
 
 @app.get("/api/transactions")
@@ -541,9 +543,9 @@ def summary(
     family_user_id:int|None=None,
     db:Session=Depends(get_db),
 ):
-    transaction_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"transactions")
-    debt_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"debts")
-    investment_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"investments")
+    transaction_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"transactions",True)
+    debt_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"debts",True)
+    investment_user_ids=_scope_user_ids(request,db,family_scope,family_user_id,"investments",True)
 
     items=db.scalars(
         _filtered_stmt(from_date,to_date,transaction_user_ids)
