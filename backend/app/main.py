@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User, Debt, InvestmentHolding
+from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, InvestmentHolding
 from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -25,7 +25,7 @@ from .bank_imports import router as bank_imports_router
 from .finance_features import router as finance_features_router
 from .shortcuts import router as shortcuts_router
 from .investments import router as investments_router
-from .users import router as users_router, current_user_id, scoped_family_user_ids
+from .users import router as users_router, current_user_id, linked_user_ids, resolve_ai_provider_user_id, require_family_ai_insights, scoped_family_user_ids, shared_linked_user_ids
 from .services.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -834,12 +834,130 @@ def save_ai_settings(body:AISettingsIn, request:Request, db:Session=Depends(get_
     if body.api_key: s.api_key_encrypted=encrypt(body.api_key)
     db.add(s);db.commit();return {"ok":True}
 
+def _ai_history_item(row:AIConversation, include_response:bool=False):
+    item={
+        "id":row.id,
+        "title":row.title,
+        "question":row.question,
+        "provider":row.provider,
+        "model":row.model,
+        "provider_user_id":row.provider_user_id,
+        "family_scope":row.family_scope,
+        "family_user_id":row.family_user_id,
+        "from_date":row.period_from,
+        "to_date":row.period_to,
+        "created_at":row.created_at.isoformat() if row.created_at else None,
+    }
+    if include_response:
+        item["response"]=row.response
+    else:
+        item["response_preview"]=(row.response[:180]+"…") if len(row.response)>180 else row.response
+    return item
+
+@app.get("/api/ai/capabilities")
+def ai_capabilities(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    providers=[]
+    own=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
+    if own and own.provider and own.model:
+        providers.append({
+            "user_id":user_id,
+            "name":"You",
+            "provider":own.provider,
+            "model":own.model,
+            "own":True,
+            "ai_insights":True,
+            "ai_categorization":True,
+        })
+    insights=set(shared_linked_user_ids(db,user_id,"ai_insights"))
+    categorization=set(shared_linked_user_ids(db,user_id,"ai_categorization"))
+    for other_id in linked_user_ids(db,user_id):
+        if other_id not in insights and other_id not in categorization:
+            continue
+        setting=db.scalar(select(AISetting).where(AISetting.user_id==other_id))
+        if not setting or not setting.provider or not setting.model:
+            continue
+        other=db.get(User,other_id)
+        providers.append({
+            "user_id":other_id,
+            "name":other.name if other else "Family member",
+            "provider":setting.provider,
+            "model":setting.model,
+            "own":False,
+            "ai_insights":other_id in insights,
+            "ai_categorization":other_id in categorization,
+        })
+    return {"providers":providers}
+
+@app.get("/api/ai/history")
+def ai_history(request:Request, limit:int=40, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    limit=max(1,min(limit,100))
+    rows=db.scalars(
+        select(AIConversation)
+        .where(AIConversation.user_id==user_id)
+        .order_by(AIConversation.created_at.desc())
+        .limit(limit)
+    ).all()
+    return {"items":[_ai_history_item(row) for row in rows]}
+
+@app.get("/api/ai/history/{history_id}")
+def ai_history_detail(history_id:int, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    row=db.get(AIConversation,history_id)
+    if not row or row.user_id!=user_id:
+        raise HTTPException(404,"AI history item not found")
+    return _ai_history_item(row,True)
+
+@app.delete("/api/ai/history/{history_id}")
+def delete_ai_history(history_id:int, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    row=db.get(AIConversation,history_id)
+    if not row or row.user_id!=user_id:
+        raise HTTPException(404,"AI history item not found")
+    db.delete(row)
+    db.commit()
+    return {"ok":True}
+
+@app.delete("/api/ai/history")
+def clear_ai_history(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    rows=db.scalars(select(AIConversation).where(AIConversation.user_id==user_id)).all()
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    return {"ok":True,"deleted":len(rows)}
+
 @app.post("/api/ai/ask")
 async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
     user_id=current_user_id(request)
-    data=summary(request, body.from_date, body.to_date, "self", None, db)
+
+    if body.family_scope in ("family","all") and body.family_user_id is None:
+        raise HTTPException(400,"Select Self or a specific family member for AI Insights")
+
+    target_user_id=body.family_user_id
+    if target_user_id is not None:
+        require_family_ai_insights(db,user_id,target_user_id)
+        data=summary(request,body.from_date,body.to_date,"all",target_user_id,db)
+        debt_user_ids=scoped_family_user_ids(
+            db,user_id,"all",target_user_id,"debts",True
+        )
+    else:
+        data=summary(request,body.from_date,body.to_date,"self",None,db)
+        debt_user_ids=[user_id]
+
+    preferred_provider=body.provider_user_id
+    if target_user_id is not None and preferred_provider is None:
+        own_setting=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
+        preferred_provider=user_id if own_setting and own_setting.provider and own_setting.model else target_user_id
+
+    provider_user_id=resolve_ai_provider_user_id(
+        db,user_id,"ai_insights",preferred_provider
+    )
+    provider_setting=db.scalar(select(AISetting).where(AISetting.user_id==provider_user_id))
+
     debts=db.scalars(
-        select(Debt).where(Debt.user_id==user_id,Debt.status=="active").order_by(Debt.created_at.desc())
+        select(Debt).where(Debt.user_id.in_(debt_user_ids),Debt.status=="active").order_by(Debt.created_at.desc())
     ).all()
     period_income=float(data["new_income"])
     period_spending=float(data["spent"])
@@ -894,6 +1012,35 @@ async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
             "available is floored at zero; overspent_by carries any negative period cash-flow amount.",
         ],
     }
-    try: answer=await ask_model(db,user_id,body.question,safe)
-    except Exception as e: raise HTTPException(400,str(e))
-    return {"answer":answer,"calculated":safe}
+    try:
+        answer=await ask_model(db,provider_user_id,body.question,safe)
+    except Exception as e:
+        raise HTTPException(400,str(e))
+
+    title=" ".join(body.question.strip().split())
+    if len(title)>80:
+        title=title[:77].rstrip()+"..."
+    history=AIConversation(
+        user_id=user_id,
+        provider_user_id=provider_user_id,
+        title=title,
+        question=body.question.strip(),
+        response=answer,
+        provider=provider_setting.provider if provider_setting else None,
+        model=provider_setting.model if provider_setting else None,
+        family_scope="family_member" if target_user_id is not None else "self",
+        family_user_id=target_user_id,
+        period_from=body.from_date.isoformat() if body.from_date else None,
+        period_to=body.to_date.isoformat() if body.to_date else None,
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+    return {
+        "answer":answer,
+        "calculated":safe,
+        "history_id":history.id,
+        "provider_user_id":provider_user_id,
+        "provider":provider_setting.provider if provider_setting else None,
+        "model":provider_setting.model if provider_setting else None,
+    }
