@@ -304,9 +304,10 @@ export default function Overview(){
 
   const focus=<>
     {hero}
+    {metrics}
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.35fr .65fr'},gap:{xs:1.15,sm:2}}}>
       {cards.recent}
-      <Stack spacing={{xs:1.15,sm:2}}>{metrics}{cards.category}</Stack>
+      {cards.category}
     </Box>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.25fr .75fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{cards.family}</Box>
   </>
