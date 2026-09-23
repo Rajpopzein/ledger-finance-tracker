@@ -96,16 +96,18 @@ export const api={
  createInvestment:(body:any)=>req<any>('/investments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateInvestment:(id:number,body:any)=>req<any>(`/investments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  deleteInvestment:(id:number)=>req<any>(`/investments/${id}`,{method:'DELETE'}),
- investmentPreview:(platform:string,file:File)=>{
+ investmentPreview:(platform:string,file:File,password?:string)=>{
    const f=new FormData()
    f.append('platform',platform)
    f.append('file',file)
+   if(password)f.append('password',password)
    return req<any>('/investments/import/preview',{method:'POST',body:f})
  },
- investmentCommit:(platform:string,file:File)=>{
+ investmentCommit:(platform:string,file:File,password?:string)=>{
    const f=new FormData()
    f.append('platform',platform)
    f.append('file',file)
+   if(password)f.append('password',password)
    return req<any>('/investments/import/commit',{method:'POST',body:f})
  },
  debts:()=>req<any>('/debts'),
@@ -130,22 +132,25 @@ export const api={
  familyLinkAction:(linkId:number,action:'accept'|'reject')=>req<any>(`/family-links/${linkId}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
  removeFamilyLink:(linkId:number)=>req<any>(`/family-links/${linkId}`,{method:'DELETE'}),
  cash:(body:any)=>req('/transactions/cash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- preview:(accountId:number,file:File)=>{
+ preview:(accountId:number,file:File,password?:string)=>{
    const f=new FormData()
    f.append('account_id',String(accountId))
    f.append('file',file)
+   if(password)f.append('password',password)
    return req<any>('/imports/preview',{method:'POST',body:f})
  },
- reprocess:(accountId:number,file:File)=>{
+ reprocess:(accountId:number,file:File,password?:string)=>{
    const f=new FormData()
    f.append('account_id',String(accountId))
    f.append('file',file)
+   if(password)f.append('password',password)
    return req<any>('/imports/reprocess',{method:'POST',body:f})
  },
- bankCommit:(accountId:number,file:File)=>{
+ bankCommit:(accountId:number,file:File,password?:string)=>{
    const f=new FormData()
    f.append('account_id',String(accountId))
    f.append('file',file)
+   if(password)f.append('password',password)
    return req<any>('/imports/bank/commit',{method:'POST',body:f})
  },
  upiPreview:(app:string,file:File)=>{
