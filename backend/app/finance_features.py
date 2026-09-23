@@ -12,7 +12,7 @@ from .models import Account, Category, Debt, DebtPayment, Transaction
 from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate, TransactionUpdate
 from .services.ai import categorize_transactions, extract_debt_from_document
 from .services.dedupe import fingerprint
-from .users import current_user_id, scoped_family_user_ids
+from .users import current_user_id, resolve_ai_provider_user_id, scoped_family_user_ids
 
 router = APIRouter()
 
@@ -51,6 +51,12 @@ async def ai_categorize_transactions(
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
+    provider_user_id = resolve_ai_provider_user_id(
+        db,
+        user_id,
+        "ai_categorization",
+        body.provider_user_id,
+    )
     ids = list(dict.fromkeys(body.transaction_ids))[:100]
     txs = db.scalars(
         select(Transaction).where(
@@ -85,7 +91,7 @@ async def ai_categorize_transactions(
     ]
 
     try:
-        suggestions = await categorize_transactions(db, user_id, payload, allowed)
+        suggestions = await categorize_transactions(db, provider_user_id, payload, allowed)
     except Exception as exc:
         raise HTTPException(400, str(exc))
 
@@ -112,6 +118,7 @@ async def ai_categorize_transactions(
         "eligible": len(eligible),
         "applied": len(applied),
         "items": applied,
+        "provider_user_id": provider_user_id,
     }
 
 @router.patch("/api/transactions/{tx_id}")
