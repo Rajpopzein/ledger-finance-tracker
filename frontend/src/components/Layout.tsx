@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react'
+import {useState} from 'react'
 import {NavLink,Outlet,useLocation,useNavigate} from 'react-router-dom'
 import {
   Avatar,
@@ -27,6 +27,7 @@ import PhoneIphoneRoundedIcon from '@mui/icons-material/PhoneIphoneRounded'
 import {PeriodProvider,usePeriod} from '../period'
 import {FamilyProvider,useFamily} from '../family'
 import {api} from '../api/client'
+import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
 
 const drawerWidth=256
@@ -45,14 +46,13 @@ function Shell(){
   const {period,setPeriodKey,options}=usePeriod()
   const {scopeKey,setScopeKey,linkedUsers,scopeLabel}=useFamily()
   const {resolvedMode}=useUI()
-  const [auth,setAuth]=useState<any>(null)
+  const {auth}=useAppData()
   const [mobileOpen,setMobileOpen]=useState(false)
   const theme=useTheme()
   const desktop=useMediaQuery(theme.breakpoints.up('md'))
   const location=useLocation()
   const navigate=useNavigate()
 
-  useEffect(()=>{api.authStatus().then(setAuth).catch(()=>setAuth(null))},[])
 
   const profileName=auth?.name||'User'
   const profileHandle=auth?.handle||''
