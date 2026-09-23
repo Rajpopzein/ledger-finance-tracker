@@ -21,6 +21,7 @@ import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
 import SettingsBrightnessRoundedIcon from '@mui/icons-material/SettingsBrightnessRounded'
 import DashboardCustomizeRoundedIcon from '@mui/icons-material/DashboardCustomizeRounded'
 import {api} from '../api/client'
+import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
 
 const templates=[
@@ -64,25 +65,24 @@ function TemplatePreview({blocks}:{blocks:readonly string[]}){
 
 export default function Settings({embedded=false}:{embedded?:boolean}){
   const {themeMode,dashboardTemplate,setThemeMode,setDashboardTemplate,savePreferences,loading:preferencesSaving,resolvedMode}=useUI()
+  const {accounts,aiSettings,refreshAccounts,refreshAISettings}=useAppData()
   const [s,setS]=useState<any>({
     provider:'',base_url:'',model:'',api_key:'',context_limit:'',temperature:0.2,
     allow_amounts:true,allow_merchants:true,allow_categories:true,allow_dates:true,
     allow_balances:false,allow_notes:false
   })
   const [msg,setMsg]=useState('')
-  const [accounts,setAccounts]=useState<any[]>([])
   const [acc,setAcc]=useState({institution:'',account_mask:'',name:''})
   const [prefMsg,setPrefMsg]=useState('')
 
-  const loadAccounts=()=>api.accounts().then(setAccounts)
 
   useEffect(()=>{
-    api.aiSettings().then(x=>setS((p:any)=>({...p,...x,provider:x.provider||''})))
-    loadAccounts()
-  },[])
+    setS((p:any)=>({...p,...aiSettings,provider:aiSettings.provider||'',api_key:''}))
+  },[aiSettings])
 
   async function saveAI(){
     await api.saveAI({...s,context_limit:s.context_limit?Number(s.context_limit):null,provider:s.provider||null})
+    await refreshAISettings()
     setMsg('AI settings saved.')
   }
 
@@ -95,7 +95,7 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
     if(!acc.institution.trim())return
     await api.createAccount({...acc,type:'bank'})
     setAcc({institution:'',account_mask:'',name:''})
-    loadAccounts()
+    await refreshAccounts()
   }
 
   const clay=claySx(resolvedMode)
