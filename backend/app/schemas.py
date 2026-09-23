@@ -48,6 +48,16 @@ class CashTransactionCreate(BaseModel):
     txn_at: datetime
     note: str | None = None
 
+class ManualTransactionCreate(BaseModel):
+    amount: Decimal = Field(gt=0)
+    direction: str = Field(default="debit", pattern="^(credit|debit)$")
+    payment_method: str = Field(default="cash", pattern="^(cash|upi)$")
+    account_id: int | None = None
+    category: str = Field(min_length=1, max_length=80)
+    txn_at: datetime
+    merchant: str | None = Field(default=None, max_length=160)
+    note: str | None = Field(default=None, max_length=2000)
+
 class AISettingsIn(BaseModel):
     provider: str | None = None
     base_url: str | None = None
