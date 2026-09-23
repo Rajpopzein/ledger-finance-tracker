@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User, Debt
+from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User, Debt, InvestmentHolding
 from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -507,6 +507,7 @@ def summary(
     spent=sum((t.amount for t in items if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")),Decimal("0"))
 
     opening_balance=Decimal("0")
+    opening_cash_outflow=Decimal("0")
     if from_date is not None:
         opening_items=db.scalars(
             _filtered_stmt(None,from_date-timedelta(days=1),user_ids)
@@ -517,9 +518,37 @@ def summary(
             t.amount for t in opening_items
             if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
         ),Decimal("0"))
+        opening_cash_outflow=sum((
+            t.amount for t in opening_items
+            if t.direction=="debit" and t.txn_type!="internal_transfer"
+        ),Decimal("0"))
         opening_balance=opening_income-opening_spent
 
     income=opening_balance+new_income
+    current_cash_outflow=sum((
+        t.amount for t in items
+        if t.direction=="debit" and t.txn_type!="internal_transfer"
+    ),Decimal("0"))
+    liquid_balance=(opening_income if from_date is not None else Decimal("0"))-opening_cash_outflow+new_income-current_cash_outflow
+
+    debt_rows=db.scalars(
+        select(Debt).where(
+            Debt.user_id.in_(user_ids),
+            Debt.status!="closed",
+        )
+    ).all()
+    debt_outstanding=sum((d.outstanding_balance for d in debt_rows),Decimal("0"))
+
+    investment_rows=db.scalars(
+        select(InvestmentHolding).where(InvestmentHolding.user_id.in_(user_ids))
+    ).all()
+    investment_value=sum((
+        holding.current_value
+        if holding.current_value is not None
+        else holding.invested_amount
+        for holding in investment_rows
+    ),Decimal("0"))
+    net_worth=liquid_balance+investment_value-debt_outstanding
     verified=sum(1 for t in items if t.verification_status=="verified")
     review=sum(1 for t in items if t.verification_status=="needs_review")
     cats=defaultdict(Decimal)
@@ -592,6 +621,11 @@ def summary(
         "income":float(income),
         "spent":float(spent),
         "available":float(income-spent),
+        "liquid_balance":float(liquid_balance),
+        "investment_value":float(investment_value),
+        "debt_outstanding":float(debt_outstanding),
+        "debt_count":len(debt_rows),
+        "net_worth":float(net_worth),
         "verified":verified,
         "total":len(items),
         "needs_review":review,
