@@ -64,7 +64,10 @@ async def ai_categorize_transactions(
         select(Category.name).where(Category.user_id == user_id).order_by(Category.name)
     ).all()
     allowed = list(dict.fromkeys([*DEFAULT_CATEGORIES, *custom]))
-    eligible = [tx for tx in txs if tx.category_id is None or tx.category_source == "ai"]
+    eligible = [
+        tx for tx in txs
+        if (tx.category_id is None and tx.category_source is None) or tx.category_source == "ai"
+    ]
     if not eligible:
         return {"requested": len(ids), "eligible": 0, "applied": 0, "items": []}
 
@@ -121,10 +124,18 @@ def set_transaction_category(
     tx = db.get(Transaction, tx_id)
     if not tx or tx.user_id != user_id:
         raise HTTPException(404, "Transaction not found")
-    category = _category(db, user_id, body.category.strip())
-    tx.category_id = category.id
-    if tx.direction == "debit":
-        tx.txn_type = "investment" if category.name == "Investments" else ("expense" if tx.txn_type == "investment" else tx.txn_type)
+    requested = body.category.strip()
+    if requested.lower() == "uncategorized":
+        tx.category_id = None
+        if tx.direction == "debit" and tx.txn_type == "investment":
+            tx.txn_type = "expense"
+        category_name = "Uncategorized"
+    else:
+        category = _category(db, user_id, requested)
+        tx.category_id = category.id
+        if tx.direction == "debit":
+            tx.txn_type = "investment" if category.name == "Investments" else ("expense" if tx.txn_type == "investment" else tx.txn_type)
+        category_name = category.name
     tx.category_previous_id = None
     tx.category_source = "manual"
     tx.category_undo_available = False
@@ -132,7 +143,7 @@ def set_transaction_category(
     return {
         "ok": True,
         "transaction_id": tx.id,
-        "category": category.name,
+        "category": category_name,
         "category_source": "manual",
         "can_undo_category": False,
     }
