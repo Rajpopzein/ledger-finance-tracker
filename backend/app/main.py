@@ -950,6 +950,8 @@ async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
         debt_user_ids=[user_id]
 
     preferred_provider=body.provider_user_id
+    if target_user_id is not None and preferred_provider not in (None,user_id,target_user_id):
+        raise HTTPException(403,"Family-member AI data can only use your provider or that family member's shared provider")
     if target_user_id is not None and preferred_provider is None:
         own_setting=db.scalar(select(AISetting).where(AISetting.user_id==user_id))
         preferred_provider=user_id if own_setting and own_setting.provider and own_setting.model else target_user_id
