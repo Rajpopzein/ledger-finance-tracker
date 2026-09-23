@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from backend.app.db import Base
-from backend.app.main import _create_manual_transaction
+from backend.app.main import _create_manual_transaction, app
 from backend.app.models import Account, Transaction, User
 
 
@@ -115,3 +115,12 @@ def test_manual_upi_uses_selected_bank_and_deduplicates_same_submission():
     assert rows[0].payment_method == "upi"
     assert rows[0].txn_type == "expense"
     assert rows[0].category.name == "Shopping"
+
+
+def test_manual_transaction_endpoint_accepts_post():
+    route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == "/api/transactions/manual"
+    )
+    assert "POST" in route.methods
