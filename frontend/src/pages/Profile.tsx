@@ -6,12 +6,14 @@ import {
   Box,
   Button,
   Chip,
+  FormControlLabel,
   InputAdornment,
   Paper,
   Stack,
   Tab,
   Tabs,
   TextField,
+  Switch,
   Typography,
 } from '@mui/material'
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
@@ -38,6 +40,7 @@ export default function Profile(){
   const [msg,setMsg]=useState('')
   const [error,setError]=useState('')
   const [busy,setBusy]=useState(false)
+  const [sharingBusy,setSharingBusy]=useState<number|null>(null)
 
   async function loadProfile(){
     const p=await api.profile()
@@ -121,6 +124,26 @@ export default function Profile(){
       setError(e.message||'Could not remove family link.')
     }finally{
       setBusy(false)
+    }
+  }
+
+  async function updateSharing(
+    user:any,
+    key:'transactions'|'debts'|'investments',
+    value:boolean,
+  ){
+    const next={...user.sharing,[key]:value}
+    setSharingBusy(user.link_id)
+    setError('')
+    setMsg('')
+    try{
+      await api.updateFamilySharing(user.link_id,next)
+      await refreshFamily()
+      setMsg('Family sharing updated.')
+    }catch(e:any){
+      setError(e.message||'Could not update family sharing.')
+    }finally{
+      setSharingBusy(null)
     }
   }
 
@@ -306,30 +329,96 @@ export default function Profile(){
       </Paper>}
 
       <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:1}}>
-          <Typography variant="h2">Connected family</Typography>
+        <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{sm:'center'}} spacing={.75} sx={{mb:1.25}}>
+          <Box>
+            <Typography variant="h2">Family sharing</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
+              Choose what each connected family member can view. Sharing is read-only and never grants edit or delete access.
+            </Typography>
+          </Box>
           <Chip size="small" label={linkedUsers.length}/>
         </Stack>
-        <Stack spacing={0.75}>
-          {linkedUsers.map(user=><Box
-            key={user.id}
-            sx={{
-              p:1.1,
-              bgcolor:'action.hover',
-              borderRadius:1.75,
-              display:'flex',
-              alignItems:'center',
-              justifyContent:'space-between',
-              gap:1,
-              minWidth:0
-            }}
-          >
-            <Box sx={{minWidth:0}}>
-              <Typography variant="body2" sx={{fontWeight:700}} noWrap>{user.name}</Typography>
-              <Typography variant="caption" color="text.secondary">{user.handle}{user.label?' · '+user.label:''}</Typography>
+
+        <Stack spacing={1}>
+          {linkedUsers.map(user=>{
+            const sharedBack=[
+              user.shared_with_me.transactions&&'Transactions',
+              user.shared_with_me.debts&&'Debts & cards',
+              user.shared_with_me.investments&&'Investments',
+            ].filter(Boolean) as string[]
+            return <Box
+              key={user.id}
+              sx={{
+                p:{xs:1.2,sm:1.5},
+                bgcolor:'action.hover',
+                borderRadius:2,
+                minWidth:0,
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                <Box sx={{minWidth:0}}>
+                  <Typography variant="body1" sx={{fontWeight:800}} noWrap>{user.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {user.handle}{user.label?' · '+user.label:''}
+                  </Typography>
+                </Box>
+                <Button size="small" color="error" disabled={busy||sharingBusy===user.link_id} onClick={()=>remove(user.link_id)}>
+                  Remove
+                </Button>
+              </Stack>
+
+              <Box sx={{
+                display:'grid',
+                gridTemplateColumns:{xs:'1fr',md:'1.25fr .75fr'},
+                gap:{xs:1,md:2},
+                mt:1.25,
+              }}>
+                <Box>
+                  <Typography variant="overline" color="text.secondary">WHAT I SHARE</Typography>
+                  <Stack direction={{xs:'column',sm:'row'}} spacing={{xs:0,sm:1.5}} sx={{mt:.25,flexWrap:'wrap'}}>
+                    <FormControlLabel
+                      control={<Switch
+                        size="small"
+                        checked={!!user.sharing.transactions}
+                        disabled={sharingBusy===user.link_id}
+                        onChange={e=>updateSharing(user,'transactions',e.target.checked)}
+                      />}
+                      label="Transactions"
+                    />
+                    <FormControlLabel
+                      control={<Switch
+                        size="small"
+                        checked={!!user.sharing.debts}
+                        disabled={sharingBusy===user.link_id}
+                        onChange={e=>updateSharing(user,'debts',e.target.checked)}
+                      />}
+                      label="Debts & cards"
+                    />
+                    <FormControlLabel
+                      control={<Switch
+                        size="small"
+                        checked={!!user.sharing.investments}
+                        disabled={sharingBusy===user.link_id}
+                        onChange={e=>updateSharing(user,'investments',e.target.checked)}
+                      />}
+                      label="Investments"
+                    />
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    These permissions control family-scoped dashboard totals and shared transaction visibility.
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="overline" color="text.secondary">SHARED WITH ME</Typography>
+                  <Stack direction="row" gap={.6} sx={{mt:.7,flexWrap:'wrap'}}>
+                    {sharedBack.map(label=><Chip key={label} size="small" variant="outlined" label={label}/>)}
+                    {!sharedBack.length&&<Typography variant="caption" color="text.secondary">Nothing shared with you.</Typography>}
+                  </Stack>
+                </Box>
+              </Box>
             </Box>
-            <Button size="small" color="error" disabled={busy} onClick={()=>remove(user.link_id)}>Remove</Button>
-          </Box>)}
+          })}
           {!linkedUsers.length&&<Typography variant="body2" color="text.secondary">No linked family members yet.</Typography>}
         </Stack>
       </Paper>
