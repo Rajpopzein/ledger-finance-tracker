@@ -112,6 +112,16 @@ export function UIProvider({children}:{children:ReactNode}){
           }
         }
       },
+      MuiDialog:{
+        styleOverrides:{
+          container:{
+            paddingTop:'var(--safe-area-top)',
+            paddingRight:'var(--safe-area-right)',
+            paddingBottom:'var(--safe-area-bottom)',
+            paddingLeft:'var(--safe-area-left)',
+          }
+        }
+      },
       MuiButton:{
         defaultProps:{disableElevation:true},
         styleOverrides:{
