@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, engine, get_db
 from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AISetting, Owner, User, Debt
-from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin
+from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
@@ -398,6 +398,87 @@ def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(
     tx.sources.append(TransactionSource(source_type="manual",source_name="Manual Cash Entry"))
     db.add(tx); db.commit(); db.refresh(tx)
     return serialize_tx(tx)
+
+@app.patch("/api/transactions/{tx_id}")
+def update_transaction(
+    tx_id:int,
+    body:TransactionUpdate,
+    request:Request,
+    db:Session=Depends(get_db),
+):
+    user_id=current_user_id(request)
+    tx=db.get(Transaction,tx_id)
+    if not tx or tx.user_id!=user_id:
+        raise HTTPException(404,"Transaction not found")
+
+    values=body.model_dump(exclude_unset=True)
+
+    if "account_id" in values:
+        account_id=values.pop("account_id")
+        if account_id is None:
+            tx.account_id=None
+        else:
+            account=db.get(Account,account_id)
+            if not account or account.user_id!=user_id:
+                raise HTTPException(404,"Account not found")
+            tx.account_id=account.id
+
+    if "category" in values:
+        category_name=(values.pop("category") or "").strip()
+        if category_name:
+            category=db.scalar(select(Category).where(
+                Category.user_id==user_id,
+                func.lower(Category.name)==category_name.lower(),
+            ))
+            if not category:
+                category=Category(user_id=user_id,name=category_name)
+                db.add(category)
+                db.flush()
+            tx.category_id=category.id
+        else:
+            tx.category_id=None
+        # Any category chosen through the normal editor is a manual decision.
+        # AI categorization must never overwrite it and any prior AI undo state is cleared.
+        tx.category_source="manual"
+        tx.category_previous_id=None
+        tx.category_undo_available=False
+
+    old_type=tx.txn_type
+    field_map={
+        "txn_at":"txn_at",
+        "amount":"amount",
+        "direction":"direction",
+        "merchant":"merchant",
+        "description":"description_raw",
+        "excluded":"excluded_from_analytics",
+    }
+    for key,attr in field_map.items():
+        if key in values:
+            setattr(tx,attr,values[key])
+
+    if old_type in ("income","expense") and "direction" in values:
+        tx.txn_type="income" if tx.direction=="credit" else "expense"
+
+    tx.fingerprint=fingerprint(
+        tx.account_id or 0,
+        tx.txn_at,
+        tx.amount,
+        tx.direction,
+        tx.description_raw or tx.merchant or tx.txn_type,
+    )
+    db.commit()
+    db.refresh(tx)
+    return serialize_tx(tx)
+
+@app.delete("/api/transactions/{tx_id}")
+def delete_transaction(tx_id:int, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    tx=db.get(Transaction,tx_id)
+    if not tx or tx.user_id!=user_id:
+        raise HTTPException(404,"Transaction not found")
+    db.delete(tx)
+    db.commit()
+    return {"ok":True}
 
 @app.patch("/api/transactions/{tx_id}/exclude")
 def exclude(tx_id:int, request:Request, db:Session=Depends(get_db)):
