@@ -16,6 +16,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
+import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded'
@@ -48,6 +49,7 @@ function Shell(){
   const {scopeKey,setScopeKey,linkedUsers,scopeLabel}=useFamily()
   const {resolvedMode}=useUI()
   const {auth}=useAppData()
+  const [mobileOpen,setMobileOpen]=useState(false)
   const theme=useTheme()
   const desktop=useMediaQuery(theme.breakpoints.up('md'))
   const nativeApp=typeof window!=='undefined'&&((window as any).__TAURI_INTERNALS__!=null||window.location.hostname==='tauri.localhost')
@@ -87,6 +89,7 @@ function Shell(){
         key={item.to}
         component={NavLink}
         to={item.to}
+        onClick={()=>setMobileOpen(false)}
         sx={{
           display:'flex',
           alignItems:'center',
@@ -122,7 +125,7 @@ function Shell(){
   </Box>
 
   return <Box sx={{minHeight:'100dvh',bgcolor:'background.default'}}>
-    {desktop&&<Drawer
+    {desktop&&!nativeApp&&<Drawer
       variant="permanent"
       sx={{
         width:drawerWidth,
@@ -135,8 +138,23 @@ function Shell(){
         }
       }}
     >{drawer}</Drawer>}
+    {!desktop&&!nativeApp&&<Drawer
+      variant="temporary"
+      open={mobileOpen}
+      onClose={()=>setMobileOpen(false)}
+      ModalProps={{keepMounted:true}}
+      sx={{
+        '& .MuiDrawer-paper':{
+          width:drawerWidth,
+          maxWidth:'86vw',
+          borderRight:'1px solid',
+          borderColor:'divider',
+          bgcolor:'background.default',
+        }
+      }}
+    >{drawer}</Drawer>}
 
-    <Box sx={{ml:{md:`${drawerWidth}px`},minWidth:0}}>
+    <Box sx={{ml:{md:nativeApp?0:'256px'},minWidth:0}}>
       <Box
         component="header"
         sx={{
@@ -169,13 +187,23 @@ function Shell(){
             <Typography sx={{fontWeight:800,lineHeight:1.1}}>Ledger</Typography>
             <Typography variant="caption" color="text.secondary">{scopeLabel}</Typography>
           </Box>
-          {!nativeApp&&<IconButton
-            aria-label="iPhone Shortcuts"
-            onClick={()=>navigate('/profile?tab=shortcuts')}
-            sx={{width:40,height:40}}
-          >
-            <PhoneIphoneRoundedIcon/>
-          </IconButton>}
+          {!nativeApp&&<Stack direction="row" spacing={0.5}>
+            <IconButton
+              aria-label="iPhone Shortcuts"
+              onClick={()=>navigate('/profile?tab=shortcuts')}
+              sx={{width:40,height:40}}
+            >
+              <PhoneIphoneRoundedIcon/>
+            </IconButton>
+            <IconButton
+              edge="end"
+              aria-label="Open navigation"
+              onClick={()=>setMobileOpen(true)}
+              sx={{width:40,height:40}}
+            >
+              <MenuRoundedIcon/>
+            </IconButton>
+          </Stack>}
         </Stack>}
 
         <Stack
@@ -250,7 +278,7 @@ function Shell(){
       </Box>
     </Box>
 
-    {!desktop&&nativeApp&&<BottomNavigation
+    {nativeApp&&<BottomNavigation
       showLabels
       value={nav.findIndex(item=>item.to==='/'?location.pathname==='/':location.pathname.startsWith(item.to))}
       onChange={(_,index)=>navigate(nav[index].to)}
