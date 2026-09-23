@@ -2,6 +2,12 @@ name: Build Ledger Native Apps
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/build-native-apps.yml'
 
 jobs:
   desktop:
