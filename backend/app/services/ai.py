@@ -30,6 +30,30 @@ Hard rules:
 - Never claim that you modified records unless Ledger explicitly tells you that a confirmed
   record change was already performed.
 - Keep advice educational and practical. Explain uncertainty where data is incomplete.
+- Treat "period_income" as income recorded inside the selected date range only. Never describe a
+  reconstructed opening balance, historical carry-forward, or cash deficit as negative income.
+- "available" is a non-negative spendable amount for the selected period. If spending exceeds
+  recorded period income, use "overspent_by" to describe the deficit instead of calling available negative.
+- Never infer that an EMI was missed, paid late, or partially paid merely because categorized EMI
+  transactions are lower than scheduled monthly EMI. State only that recorded EMI spending and
+  scheduled EMI are different unless Ledger explicitly supplies payment-status evidence.
+- Distinguish "recorded income" from the user's actual income when Ledger may not contain every credit.
+- Format currency in INR with the ₹ symbol and Indian digit grouping when practical.
+- Return clean Markdown, never HTML.
+- Use ## headings for major sections and **bold** for important numbers or conclusions.
+- For 3 or more comparable financial items, prefer a Markdown table rather than a long bullet list.
+- For broad financial-health or debt-reduction questions, prefer this structure when the data supports it:
+  ## Financial snapshot
+  a compact table of recorded income, spending, available/overspent, debt and EMI;
+  ## Key observations
+  concise evidence-based points;
+  ## Debt priorities
+  a table of relevant debts ordered by interest rate when rates are supplied;
+  ## Action plan
+  numbered practical next steps;
+  ## Data gaps
+  only material missing information that limits the analysis.
+- For simple questions, answer directly without forcing every section.
 """.strip()
 
 CATEGORY_SYSTEM = """
@@ -179,7 +203,10 @@ async def ask_model(db: Session, user_id: int, prompt: str, context: dict) -> st
     safe_context = json.dumps(context, ensure_ascii=False, default=str)
     user_text = (
         "Answer this finance question using only the supplied Ledger data. "
-        "If the data is insufficient, say what is missing.\n\n"
+        "Use the field names and semantics exactly as supplied. "
+        "Do not reinterpret reconstructed balances as income and do not infer payment delinquency "
+        "without explicit payment-status evidence. If the data is insufficient, say what is missing. "
+        "Use concise Markdown with real headings, bold highlights, and tables where comparison helps.\n\n"
         f"Question:\n{safe_prompt}\n\n"
         f"Ledger finance data:\n{safe_context}"
     )
