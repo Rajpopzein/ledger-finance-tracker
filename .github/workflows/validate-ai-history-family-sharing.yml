@@ -33,6 +33,8 @@ jobs:
         run: pip install -r backend/requirements.txt
 
       - name: Run backend tests
+        env:
+          PYTHONPATH: .
         run: pytest -q backend/tests
 
       - name: Compile backend
