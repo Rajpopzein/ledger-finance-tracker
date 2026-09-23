@@ -1,0 +1,83 @@
+name: Build Ledger Native Apps
+
+on:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build Ledger desktop app
+        run: npm run tauri build -- --no-sign
+
+      - name: Upload desktop bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ matrix.name }}
+          path: |
+            frontend/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          sdkmanager "ndk;27.2.12479018"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Initialize Android project
+        run: npm run app:android:init
+
+      - name: Build debug Android APK
+        run: npm run tauri android build -- --debug --apk --target aarch64
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-Android
+          path: |
+            frontend/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
