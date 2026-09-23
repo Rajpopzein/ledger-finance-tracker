@@ -134,7 +134,9 @@ def update_transaction(
             if not account or account.user_id != user_id:
                 raise HTTPException(400, "Account not found")
             tx.account_id = account.id
-    if "category" in values:
+    category_name = None
+    category_was_updated = "category" in values
+    if category_was_updated:
         category_name = values.pop("category")
         tx.category_id = _category(db, user_id, category_name).id if category_name else None
         tx.category_source = "manual" if category_name else None
@@ -147,10 +149,15 @@ def update_transaction(
     for key, value in values.items():
         setattr(tx, key, value)
 
+    is_investment = (
+        category_name == "Investments"
+        if category_was_updated
+        else bool(tx.category and tx.category.name == "Investments")
+    )
     tx.txn_type = (
         "internal_transfer" if tx.txn_type == "internal_transfer"
         else "income" if tx.direction == "credit"
-        else "investment" if tx.category and tx.category.name == "Investments"
+        else "investment" if is_investment
         else "expense"
     )
     tx.fingerprint = fingerprint(
