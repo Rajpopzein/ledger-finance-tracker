@@ -97,6 +97,16 @@ class DebtPaymentCreate(BaseModel):
     note: str | None = Field(default=None, max_length=255)
 
 
+class TransactionUpdate(BaseModel):
+    account_id: int | None = None
+    txn_at: datetime | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
+    direction: str | None = Field(default=None, pattern="^(debit|credit)$")
+    merchant: str | None = Field(default=None, max_length=160)
+    description: str | None = Field(default=None, max_length=2000)
+    category: str | None = Field(default=None, max_length=80)
+    excluded: bool | None = None
+
 class TransactionCategoryUpdate(BaseModel):
     category: str = Field(min_length=1, max_length=80)
 
