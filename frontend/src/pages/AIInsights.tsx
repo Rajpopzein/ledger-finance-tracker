@@ -13,6 +13,7 @@ import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import {api} from '../api/client'
 import {usePeriod} from '../period'
 import {claySx,useUI} from '../ui'
+import FinanceResponse,{FinanceHighlights} from '../components/FinanceResponse'
 
 export default function AIInsights(){
   const {period}=usePeriod()
@@ -20,6 +21,7 @@ export default function AIInsights(){
   const [settings,setSettings]=useState<any>({status:'not_configured'})
   const [q,setQ]=useState(()=>sessionStorage.getItem('ledger_ai_prompt')||'Where did I spend more this month?')
   const [answer,setAnswer]=useState('')
+  const [calculated,setCalculated]=useState<any>(null)
   const [busy,setBusy]=useState(false)
 
   useEffect(()=>{
@@ -34,9 +36,11 @@ export default function AIInsights(){
   async function ask(){
     setBusy(true)
     setAnswer('')
+    setCalculated(null)
     try{
       const r=await api.askAI(q,period.from,period.to)
       setAnswer(r.answer)
+      setCalculated(r.calculated||null)
     }catch(e:any){
       setAnswer(e.message)
     }finally{
@@ -92,8 +96,17 @@ export default function AIInsights(){
           ].map(prompt=><Chip key={prompt} label={prompt} onClick={()=>setQ(prompt)} variant="outlined"/>)}
         </Stack>
 
-        {answer&&<Paper variant="outlined" sx={{p:2,borderRadius:3,bgcolor:'action.hover'}}>
-          <Typography sx={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{answer}</Typography>
+        {answer&&<Paper variant="outlined" sx={{p:{xs:1.5,sm:2.2},borderRadius:3,bgcolor:'action.hover'}}>
+          <Stack spacing={1.6}>
+            {calculated&&<FinanceHighlights items={[
+              {label:'Income',value:new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(calculated.period_income??0)},
+              {label:'Spent',value:new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(calculated.period_spending??0)},
+              {label:'Available',value:new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(calculated.available??0)},
+              ...(calculated.overspent_by>0?[{label:'Overspent',value:new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(calculated.overspent_by)}]:[]),
+              ...(calculated.debt?.total_outstanding>0?[{label:'Debt',value:new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(calculated.debt.total_outstanding)}]:[]),
+            ]}/>}
+            <FinanceResponse text={answer}/>
+          </Stack>
         </Paper>}
 
         {settings.status!=='configured'&&<Alert severity="info">Connect a local OpenAI-compatible model or Gemini in Settings to enable analysis.</Alert>}
