@@ -303,6 +303,7 @@ export default function Transactions(){
                           onChange={e=>changeCategory(t,String(e.target.value))}
                           disabled={aiBusy}
                         >
+                          <MenuItem value="Uncategorized">Uncategorized</MenuItem>
                           {categories.map((cat:any)=><MenuItem key={cat.name} value={cat.name}>{cat.name}</MenuItem>)}
                         </Select>
                       </FormControl>
