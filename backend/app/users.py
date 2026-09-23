@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import FamilyLink, FamilySharingPreference, User
+from .models import AISetting, FamilyAISharingPreference, FamilyLink, FamilySharingPreference, User
 from .schemas import FamilyLinkAction, FamilyLinkCreate, FamilySharingUpdate, UserPreferencesUpdate, UserProfileUpdate, UserSignup
 from .services.auth import hash_password
 
@@ -132,12 +132,18 @@ def linked_user_ids(db: Session, user_id: int) -> list[int]:
         )
     return list(dict.fromkeys(ids))
 
-def _sharing_values(pref: FamilySharingPreference | None):
-    # Missing rows preserve Ledger's existing family-sharing behavior.
+def _sharing_values(
+    pref: FamilySharingPreference | None,
+    ai_pref: FamilyAISharingPreference | None = None,
+):
+    # Missing data-sharing rows preserve Ledger's existing family behavior.
+    # AI capability sharing is opt-in and therefore defaults to False.
     return {
         "transactions": True if pref is None else bool(pref.share_transactions),
         "debts": True if pref is None else bool(pref.share_debts),
         "investments": True if pref is None else bool(pref.share_investments),
+        "ai_insights": False if ai_pref is None else bool(ai_pref.share_ai_insights),
+        "ai_categorization": False if ai_pref is None else bool(ai_pref.share_ai_categorization),
     }
 
 def family_link_sharing(db: Session, link: FamilyLink, owner_user_id: int):
@@ -147,10 +153,16 @@ def family_link_sharing(db: Session, link: FamilyLink, owner_user_id: int):
             FamilySharingPreference.owner_user_id == owner_user_id,
         )
     )
-    return _sharing_values(pref)
+    ai_pref = db.scalar(
+        select(FamilyAISharingPreference).where(
+            FamilyAISharingPreference.family_link_id == link.id,
+            FamilyAISharingPreference.owner_user_id == owner_user_id,
+        )
+    )
+    return _sharing_values(pref, ai_pref)
 
 def shared_linked_user_ids(db: Session, viewer_user_id: int, resource: str) -> list[int]:
-    if resource not in {"transactions", "debts", "investments"}:
+    if resource not in {"transactions", "debts", "investments", "ai_insights", "ai_categorization"}:
         raise ValueError("Unknown family sharing resource")
     links = db.scalars(
         select(FamilyLink).where(
@@ -198,6 +210,52 @@ def scoped_family_user_ids(
     if family_scope == "all":
         return [viewer_user_id, *shared]
     raise HTTPException(400, "family_scope must be self, family or all")
+
+def _configured_ai_setting(db: Session, user_id: int) -> AISetting | None:
+    setting = db.scalar(select(AISetting).where(AISetting.user_id == user_id))
+    if not setting or not setting.provider or not setting.model:
+        return None
+    return setting
+
+def resolve_ai_provider_user_id(
+    db: Session,
+    requester_user_id: int,
+    capability: str,
+    preferred_user_id: int | None = None,
+) -> int:
+    if capability not in {"ai_insights", "ai_categorization"}:
+        raise ValueError("Unknown AI capability")
+
+    if preferred_user_id is not None:
+        if preferred_user_id == requester_user_id:
+            if not _configured_ai_setting(db, requester_user_id):
+                raise HTTPException(400, "Your AI provider is not configured")
+            return requester_user_id
+        if preferred_user_id not in linked_user_ids(db, requester_user_id):
+            raise HTTPException(403, "That AI provider owner is not linked to your family")
+        if preferred_user_id not in shared_linked_user_ids(db, requester_user_id, capability):
+            raise HTTPException(403, "That family member has not shared this AI capability with you")
+        if not _configured_ai_setting(db, preferred_user_id):
+            raise HTTPException(400, "That family member's AI provider is not configured")
+        return preferred_user_id
+
+    if _configured_ai_setting(db, requester_user_id):
+        return requester_user_id
+
+    for provider_user_id in shared_linked_user_ids(db, requester_user_id, capability):
+        if _configured_ai_setting(db, provider_user_id):
+            return provider_user_id
+    raise HTTPException(400, "No AI provider is available. Configure AI or ask a family member to share this AI capability.")
+
+def require_family_ai_insights(
+    db: Session,
+    viewer_user_id: int,
+    family_user_id: int,
+):
+    if family_user_id not in linked_user_ids(db, viewer_user_id):
+        raise HTTPException(403, "That user is not linked to your family")
+    if family_user_id not in shared_linked_user_ids(db, viewer_user_id, "ai_insights"):
+        raise HTTPException(403, "That family member has not shared AI Insights with you")
 
 @router.get("/api/preferences")
 def preferences(request: Request, db: Session = Depends(get_db)):
@@ -385,13 +443,28 @@ def update_family_sharing(
         )
         db.add(pref)
 
+    ai_pref = db.scalar(
+        select(FamilyAISharingPreference).where(
+            FamilyAISharingPreference.family_link_id == link.id,
+            FamilyAISharingPreference.owner_user_id == user_id,
+        )
+    )
+    if not ai_pref:
+        ai_pref = FamilyAISharingPreference(
+            family_link_id=link.id,
+            owner_user_id=user_id,
+        )
+        db.add(ai_pref)
+
     pref.share_transactions = body.transactions
     pref.share_debts = body.debts
     pref.share_investments = body.investments
+    ai_pref.share_ai_insights = body.ai_insights
+    ai_pref.share_ai_categorization = body.ai_categorization
     db.commit()
     return {
         "link_id": link.id,
-        "sharing": _sharing_values(pref),
+        "sharing": _sharing_values(pref, ai_pref),
     }
 
 @router.delete("/api/family-links/{link_id}")
