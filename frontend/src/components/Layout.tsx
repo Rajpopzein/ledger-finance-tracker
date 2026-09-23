@@ -65,7 +65,10 @@ function Shell(){
     height:'100%',
     display:'flex',
     flexDirection:'column',
-    p:1.75,
+    px:'calc(14px + var(--safe-area-left))',
+    pr:'calc(14px + var(--safe-area-right))',
+    pt:'calc(14px + var(--safe-area-top))',
+    pb:'calc(14px + var(--safe-area-bottom))',
     bgcolor:'background.default',
   }}>
     <Box sx={{...claySx(resolvedMode),p:1.6,mb:2}}>
@@ -154,8 +157,21 @@ function Shell(){
           position:'sticky',
           top:0,
           zIndex:20,
-          px:{xs:1.25,sm:2,lg:3},
-          py:{xs:1,sm:1.25},
+          pl:{
+            xs:'calc(10px + var(--safe-area-left))',
+            sm:'calc(16px + var(--safe-area-left))',
+            lg:'calc(24px + var(--safe-area-left))',
+          },
+          pr:{
+            xs:'calc(10px + var(--safe-area-right))',
+            sm:'calc(16px + var(--safe-area-right))',
+            lg:'calc(24px + var(--safe-area-right))',
+          },
+          pt:{
+            xs:'calc(8px + var(--safe-area-top))',
+            sm:'calc(10px + var(--safe-area-top))',
+          },
+          pb:{xs:1,sm:1.25},
           bgcolor:resolvedMode==='dark'?'rgba(11,14,18,.92)':'rgba(239,243,241,.92)',
           backdropFilter:'blur(16px)',
           borderBottom:'1px solid',
@@ -238,8 +254,21 @@ function Shell(){
         width:'100%',
         maxWidth:1440,
         mx:'auto',
-        p:{xs:1.25,sm:2,lg:3},
-        pb:{xs:3,md:3},
+        pt:{xs:1.25,sm:2,lg:3},
+        pl:{
+          xs:'calc(10px + var(--safe-area-left))',
+          sm:'calc(16px + var(--safe-area-left))',
+          lg:'calc(24px + var(--safe-area-left))',
+        },
+        pr:{
+          xs:'calc(10px + var(--safe-area-right))',
+          sm:'calc(16px + var(--safe-area-right))',
+          lg:'calc(24px + var(--safe-area-right))',
+        },
+        pb:{
+          xs:'calc(24px + var(--safe-area-bottom))',
+          md:'calc(24px + var(--safe-area-bottom))',
+        },
       }}>
         <Outlet/>
       </Box>
