@@ -40,12 +40,13 @@ export default function ImportReview(){
   const clay=claySx(resolvedMode)
 
   useEffect(()=>{
+    if(mode!=='bank')return
     api.accounts().then(a=>{
       const banks=a.filter((x:any)=>x.type==='bank')
       setAccounts(banks)
-      setAccount(banks[0]?.id)
+      setAccount(current=>current??banks[0]?.id)
     })
-  },[])
+  },[mode])
 
   async function pick(file:File){
     if(!account)return
@@ -113,7 +114,7 @@ export default function ImportReview(){
       </Tabs>
     </Paper>
 
-    {mode==='upi'?<UPIImport/>:mode==='debt'?<DebtImport/>:mode==='investment'?<InvestmentImport/>:<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
+    {mode==='bank'&&<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 340px'},gap:{xs:1.15,sm:2}}}>
       <Stack spacing={{xs:1.5,sm:2}}>
         <Paper sx={{...clay,p:{xs:1.4,sm:2.1}}}>
           {accounts.length? <Stack spacing={1.6}>
@@ -224,5 +225,8 @@ export default function ImportReview(){
         <Typography variant="caption" color="text.secondary" sx={{display:'block',mt:2}}>The same transaction can appear in multiple sources without becoming multiple expenses.</Typography>
       </Paper>
     </Box>}
+    {mode==='upi'&&<UPIImport/>}
+    {mode==='debt'&&<DebtImport/>}
+    {mode==='investment'&&<InvestmentImport/>}
   </Stack>
 }
