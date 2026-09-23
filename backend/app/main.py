@@ -635,7 +635,7 @@ def summary(
     }
 
 @app.post("/api/imports/preview")
-async def preview(request:Request, account_id:int=Form(...), file:UploadFile=File(...), db:Session=Depends(get_db)):
+async def preview(request:Request, account_id:int=Form(...), file:UploadFile=File(...), password:str|None=Form(None), db:Session=Depends(get_db)):
     user_id=current_user_id(request)
     account=db.get(Account,account_id)
     if not account or account.user_id!=user_id:
@@ -655,7 +655,7 @@ async def preview(request:Request, account_id:int=Form(...), file:UploadFile=Fil
         )
         already_imported=bool(existing_source)
     try:
-        rows=parse_statement(file.filename or "statement.csv",content)
+        rows=parse_statement(file.filename or "statement.csv",content,password)
     except ValueError as e:
         raise HTTPException(400,str(e))
     if not rows:
