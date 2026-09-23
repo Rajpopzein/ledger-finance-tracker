@@ -36,6 +36,7 @@ class AccountCreate(BaseModel):
 
 class CashTransactionCreate(BaseModel):
     amount: Decimal = Field(gt=0)
+    direction: str = Field(default="debit", pattern="^(credit|debit)$")
     category: str
     txn_at: datetime
     note: str | None = None
