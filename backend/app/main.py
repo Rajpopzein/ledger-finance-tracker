@@ -490,6 +490,7 @@ def _create_manual_transaction(
     txn_type=(
         "income" if direction=="credit"
         else "investment" if category.name=="Investments"
+        else "cash_expense" if payment_method=="cash"
         else "expense"
     )
     memo=(note or merchant or category.name).strip()
