@@ -322,7 +322,7 @@ export default function Debts(){
               <TableCell align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
               <TableCell>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
               {activeRows&&<TableCell>
-                <Stack direction="row" spacing=.75 alignItems="center">
+                <Stack direction="row" spacing={0.7}5 alignItems="center">
                   <TextField
                     size="small"
                     type="number"
@@ -344,7 +344,7 @@ export default function Debts(){
                 </Stack>
               </TableCell>}
               <TableCell>
-                <Stack direction="row" spacing=.5>
+                <Stack direction="row" spacing={0.5}>
                   <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(debt)}>Edit</Button>
                   {activeRows&&<Button size="small" disabled={busy==='close:'+debt.id} onClick={()=>closeDebt(debt)}>Close</Button>}
                   <Button
