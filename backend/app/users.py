@@ -179,6 +179,7 @@ def scoped_family_user_ids(
     family_scope: str = "self",
     family_user_id: int | None = None,
     resource: str = "transactions",
+    allow_empty_unshared: bool = False,
 ) -> list[int]:
     linked = linked_user_ids(db, viewer_user_id)
     shared = shared_linked_user_ids(db, viewer_user_id, resource)
@@ -186,6 +187,8 @@ def scoped_family_user_ids(
         if family_user_id not in linked:
             raise HTTPException(403, "That user is not linked to your family")
         if family_user_id not in shared:
+            if allow_empty_unshared:
+                return [-1]
             raise HTTPException(403, f"That family member is not sharing {resource} with you")
         return [family_user_id]
     if family_scope == "self":
