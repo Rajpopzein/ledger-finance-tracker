@@ -20,9 +20,9 @@ def _source_type(file_name: str) -> str:
         return "statement"
     return name.rsplit(".", 1)[-1]
 
-def _parse(file_name: str, content: bytes):
+def _parse(file_name: str, content: bytes, password: str | None = None):
     try:
-        rows = parse_statement(file_name, content)
+        rows = parse_statement(file_name, content, password)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     if not rows:
@@ -68,6 +68,7 @@ async def commit_bank_statement(
     request: Request,
     account_id: int = Form(...),
     file: UploadFile = File(...),
+    password: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
@@ -86,7 +87,7 @@ async def commit_bank_statement(
             "review": 0,
         }
 
-    rows = _parse(file_name, content)
+    rows = _parse(file_name, content, password)
 
     batch = db.scalar(
         select(ImportBatch).where(
