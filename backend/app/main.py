@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, engine, get_db
 from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, InvestmentHolding
-from .schemas import AccountCreate, CashTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
+from .schemas import AccountCreate, CashTransactionCreate, ManualTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
@@ -439,27 +439,69 @@ def serialize_tx(t):
         "sources":[{"type":src.source_type,"name":src.source_name} for src in t.sources],
     }
 
-@app.post("/api/transactions/cash")
-def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(get_db)):
-    user_id=current_user_id(request)
-    category=db.scalar(select(Category).where(Category.user_id==user_id,func.lower(Category.name)==body.category.lower()))
+def _create_manual_transaction(
+    *,
+    user_id:int,
+    amount:Decimal,
+    direction:str,
+    payment_method:str,
+    category_name:str,
+    txn_at:datetime,
+    merchant:str|None,
+    note:str|None,
+    account_id:int|None,
+    db:Session,
+):
+    category=db.scalar(
+        select(Category).where(
+            Category.user_id==user_id,
+            func.lower(Category.name)==category_name.lower(),
+        )
+    )
     if not category:
-        category=Category(user_id=user_id,name=body.category); db.add(category); db.flush()
-    cash=db.scalar(select(Account).where(Account.user_id==user_id,Account.type=="cash"))
-    if not cash:
-        cash=Account(user_id=user_id,name="Cash",institution="Cash",type="cash",is_active=True)
-        db.add(cash); db.flush()
+        category=Category(user_id=user_id,name=category_name.strip())
+        db.add(category)
+        db.flush()
 
-    direction=body.direction
-    txn_type="income" if direction=="credit" else "cash_expense"
-    fp=fingerprint(cash.id, body.txn_at, body.amount, direction, body.note or body.category)
+    if payment_method=="cash":
+        account=db.scalar(
+            select(Account).where(
+                Account.user_id==user_id,
+                Account.type=="cash",
+            )
+        )
+        if not account:
+            account=Account(
+                user_id=user_id,
+                name="Cash",
+                institution="Cash",
+                type="cash",
+                is_active=True,
+            )
+            db.add(account)
+            db.flush()
+    else:
+        if account_id is None:
+            raise HTTPException(400,"Select the bank account used for this UPI transaction")
+        account=db.get(Account,account_id)
+        if not account or account.user_id!=user_id or account.type!="bank" or not account.is_active:
+            raise HTTPException(400,"Select a valid active bank account for this UPI transaction")
+
+    txn_type=(
+        "income" if direction=="credit"
+        else "investment" if category.name=="Investments"
+        else "expense"
+    )
+    memo=(note or merchant or category.name).strip()
+    fp=fingerprint(account.id,txn_at,amount,direction,memo)
     existing=db.scalar(
         select(Transaction)
-        .join(TransactionSource, TransactionSource.transaction_id==Transaction.id)
+        .join(TransactionSource,TransactionSource.transaction_id==Transaction.id)
         .where(
             Transaction.user_id==user_id,
-            Transaction.account_id==cash.id,
+            Transaction.account_id==account.id,
             Transaction.fingerprint==fp,
+            Transaction.payment_method==payment_method,
             TransactionSource.source_type=="manual",
         )
         .limit(1)
@@ -469,21 +511,60 @@ def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(
 
     tx=Transaction(
         user_id=user_id,
-        account_id=cash.id,
+        account_id=account.id,
         category_id=category.id,
-        txn_at=body.txn_at,
-        amount=body.amount,
+        category_source="manual",
+        category_previous_id=None,
+        category_undo_available=False,
+        txn_at=txn_at,
+        amount=amount,
         direction=direction,
         txn_type=txn_type,
-        payment_method="cash",
-        merchant=body.note or body.category,
-        description_raw=body.note,
+        payment_method=payment_method,
+        merchant=(merchant or note or category.name).strip(),
+        description_raw=note.strip() if note else None,
         fingerprint=fp,
         verification_status="manual",
     )
-    tx.sources.append(TransactionSource(source_type="manual",source_name="Manual Cash Entry"))
-    db.add(tx); db.commit(); db.refresh(tx)
+    source_name="Manual Cash Entry" if payment_method=="cash" else "Manual UPI Entry"
+    tx.sources.append(TransactionSource(source_type="manual",source_name=source_name))
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
     return serialize_tx(tx)
+
+@app.post("/api/transactions/manual")
+def create_manual_transaction(body:ManualTransactionCreate, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    return _create_manual_transaction(
+        user_id=user_id,
+        amount=body.amount,
+        direction=body.direction,
+        payment_method=body.payment_method,
+        category_name=body.category,
+        txn_at=body.txn_at,
+        merchant=body.merchant,
+        note=body.note,
+        account_id=body.account_id,
+        db=db,
+    )
+
+@app.post("/api/transactions/cash")
+def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(get_db)):
+    # Backward-compatible endpoint used by older clients.
+    user_id=current_user_id(request)
+    return _create_manual_transaction(
+        user_id=user_id,
+        amount=body.amount,
+        direction=body.direction,
+        payment_method="cash",
+        category_name=body.category,
+        txn_at=body.txn_at,
+        merchant=None,
+        note=body.note,
+        account_id=None,
+        db=db,
+    )
 
 @app.patch("/api/transactions/{tx_id}")
 def update_transaction(
