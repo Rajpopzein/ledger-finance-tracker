@@ -620,7 +620,7 @@ def summary(
         "new_income":float(new_income),
         "income":float(income),
         "spent":float(spent),
-        "available":float(income-spent),
+        "available":float(new_income-spent),
         "liquid_balance":float(liquid_balance),
         "investment_value":float(investment_value),
         "debt_outstanding":float(debt_outstanding),
