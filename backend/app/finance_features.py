@@ -8,9 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Category, Debt, DebtPayment, Transaction
-from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate
+from .models import Account, Category, Debt, DebtPayment, Transaction
+from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate, TransactionUpdate
 from .services.ai import categorize_transactions, extract_debt_from_document
+from .services.dedupe import fingerprint
 from .users import current_user_id
 
 router = APIRouter()
@@ -112,6 +113,71 @@ async def ai_categorize_transactions(
         "applied": len(applied),
         "items": applied,
     }
+
+@router.patch("/api/transactions/{tx_id}")
+def update_transaction(
+    tx_id: int,
+    body: TransactionUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    tx = db.get(Transaction, tx_id)
+    if not tx or tx.user_id != user_id:
+        raise HTTPException(404, "Transaction not found")
+
+    values = body.model_dump(exclude_unset=True)
+    if "account_id" in values:
+        account_id = values.pop("account_id")
+        if account_id is not None:
+            account = db.get(Account, account_id)
+            if not account or account.user_id != user_id:
+                raise HTTPException(400, "Account not found")
+            tx.account_id = account.id
+    if "category" in values:
+        category_name = values.pop("category")
+        tx.category_id = _category(db, user_id, category_name).id if category_name else None
+        tx.category_source = "manual" if category_name else None
+        tx.category_previous_id = None
+        tx.category_undo_available = False
+    if "description" in values:
+        tx.description_raw = values.pop("description")
+    if "excluded" in values:
+        tx.excluded_from_analytics = values.pop("excluded")
+    for key, value in values.items():
+        setattr(tx, key, value)
+
+    tx.txn_type = (
+        "internal_transfer" if tx.txn_type == "internal_transfer"
+        else "income" if tx.direction == "credit"
+        else "investment" if tx.category and tx.category.name == "Investments"
+        else "expense"
+    )
+    tx.fingerprint = fingerprint(
+        tx.account_id or 0,
+        tx.txn_at,
+        tx.amount,
+        tx.direction,
+        tx.description_raw or tx.merchant or "",
+    )
+    tx.verification_status = "manual"
+    db.commit()
+    db.refresh(tx)
+    return {"ok": True, "transaction_id": tx.id}
+
+@router.delete("/api/transactions/{tx_id}")
+def delete_transaction(
+    tx_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    tx = db.get(Transaction, tx_id)
+    if not tx or tx.user_id != user_id:
+        raise HTTPException(404, "Transaction not found")
+    db.delete(tx)
+    db.commit()
+    return {"ok": True}
 
 @router.patch("/api/transactions/{tx_id}/category")
 def set_transaction_category(
@@ -278,6 +344,20 @@ def update_debt(
     db.commit()
     db.refresh(debt)
     return _serialize_debt(debt)
+
+@router.delete("/api/debts/{debt_id}")
+def delete_debt(
+    debt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    debt = db.get(Debt, debt_id)
+    if not debt or debt.user_id != user_id:
+        raise HTTPException(404, "Debt not found")
+    db.delete(debt)
+    db.commit()
+    return {"ok": True}
 
 @router.post("/api/debts/{debt_id}/payments")
 def add_debt_payment(
