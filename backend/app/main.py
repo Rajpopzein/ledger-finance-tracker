@@ -824,14 +824,19 @@ async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
         "categories":category_rows,
         "debt":{
             "total_outstanding":float(sum((d.outstanding_balance for d in debts),Decimal("0"))),
-            "monthly_emi":float(sum((d.emi_amount or Decimal("0") for d in debts),Decimal("0"))),
+            "loan_outstanding":float(sum((d.outstanding_balance for d in debts if d.debt_type!="credit_card"),Decimal("0"))),
+            "credit_card_outstanding":float(sum((d.outstanding_balance for d in debts if d.debt_type=="credit_card"),Decimal("0"))),
+            "monthly_loan_emi":float(sum(((d.emi_amount or Decimal("0")) for d in debts if d.debt_type!="credit_card"),Decimal("0"))),
+            "monthly_card_minimum_due":float(sum(((d.emi_amount or Decimal("0")) for d in debts if d.debt_type=="credit_card"),Decimal("0"))),
+            "monthly_commitments":float(sum((d.emi_amount or Decimal("0") for d in debts),Decimal("0"))),
             "items":[
                 {
                     "lender":d.lender,
                     "type":d.debt_type,
                     "outstanding":float(d.outstanding_balance),
                     "interest_rate":float(d.interest_rate) if d.interest_rate is not None else None,
-                    "emi":float(d.emi_amount) if d.emi_amount is not None else None,
+                    "monthly_commitment":float(d.emi_amount) if d.emi_amount is not None else None,
+                    "monthly_commitment_type":"minimum_due" if d.debt_type=="credit_card" else "emi",
                     "next_due_date":d.next_due_date.date().isoformat() if d.next_due_date else None,
                 }
                 for d in debts[:20]
@@ -840,7 +845,7 @@ async def ai_ask(body:AIQuestion, request:Request, db:Session=Depends(get_db)):
         "data_notes":[
             "period_income contains only credit transactions recorded by Ledger inside the selected period; it may not represent all real-world income if imports are incomplete.",
             "opening_balance_reconstructed is historical ledger carry-forward and must not be described as current-period income.",
-            "category totals describe recorded transactions and are not proof that a scheduled EMI was paid, missed, late or partial.",
+            "category totals describe recorded transactions and are not proof that a scheduled EMI or credit-card minimum due was paid, missed, late or partial.",
             "available is floored at zero; overspent_by carries any negative period cash-flow amount.",
         ],
     }
