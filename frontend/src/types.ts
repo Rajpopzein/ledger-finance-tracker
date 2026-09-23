@@ -57,6 +57,7 @@ export type DebtPayment={
 
 export type Debt={
   id:number
+  user_id?:number
   lender:string
   debt_type:string
   principal:number
@@ -88,6 +89,7 @@ export type DebtList={
 
 export type InvestmentHolding={
   id:number
+  user_id?:number
   platform:string
   asset_type:string
   symbol:string
