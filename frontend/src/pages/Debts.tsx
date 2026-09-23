@@ -5,13 +5,23 @@ import {
   Box,
   Button,
   Chip,
-  Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
@@ -53,6 +63,7 @@ export default function Debts(){
     active_count:0,
   })
   const [form,setForm]=useState(emptyForm())
+  const [addOpen,setAddOpen]=useState(false)
   const [editId,setEditId]=useState<number|null>(null)
   const [editForm,setEditForm]=useState(emptyForm())
   const [payment,setPayment]=useState<Record<number,string>>({})
@@ -62,7 +73,7 @@ export default function Debts(){
 
   async function load(){
     try{setData(await api.debts())}
-    catch(e:any){setError(e.message||'Could not load debts.')}
+    catch(e:any){setError(e.message||'Could not load liabilities.')}
   }
 
   useEffect(()=>{load()},[])
@@ -85,11 +96,13 @@ export default function Debts(){
         notes:form.notes||null,
         source_type:'manual',
       })
+      const isCard=form.debt_type==='credit_card'
       setForm(emptyForm())
-      setNotice(form.debt_type==='credit_card'?'Credit card outstanding added.':'Debt added.')
+      setAddOpen(false)
+      setNotice(isCard?'Credit card outstanding added.':'Loan added.')
       await load()
     }catch(e:any){
-      setError(e.message||'Could not add debt.')
+      setError(e.message||'Could not add liability.')
     }finally{
       setBusy('')
     }
@@ -113,11 +126,11 @@ export default function Debts(){
     setNotice('')
   }
 
-  async function saveEdit(debt:Debt){
-    if(!editForm.lender.trim()||!editForm.outstanding_balance)return
-    setBusy('edit:'+debt.id);setError('');setNotice('')
+  async function saveEdit(){
+    if(!editId||!editForm.lender.trim()||!editForm.outstanding_balance)return
+    setBusy('edit:'+editId);setError('');setNotice('')
     try{
-      await api.updateDebt(debt.id,{
+      await api.updateDebt(editId,{
         lender:editForm.lender.trim(),
         debt_type:editForm.debt_type||'loan',
         principal:Number(editForm.principal||editForm.outstanding_balance),
@@ -130,25 +143,25 @@ export default function Debts(){
         notes:editForm.notes||null,
       })
       setEditId(null)
-      setNotice('Debt updated.')
+      setNotice('Liability updated.')
       await load()
     }catch(e:any){
-      setError(e.message||'Could not update debt.')
+      setError(e.message||'Could not update liability.')
     }finally{
       setBusy('')
     }
   }
 
   async function deleteDebt(debt:Debt){
-    if(!window.confirm(`Delete ${debt.lender} debt and its payment history?`))return
+    if(!window.confirm(`Delete ${debt.lender} and its payment history?`))return
     setBusy('delete:'+debt.id);setError('');setNotice('')
     try{
       await api.deleteDebt(debt.id)
-      setNotice('Debt deleted.')
+      setNotice('Liability deleted.')
       if(editId===debt.id)setEditId(null)
       await load()
     }catch(e:any){
-      setError(e.message||'Could not delete debt.')
+      setError(e.message||'Could not delete liability.')
     }finally{
       setBusy('')
     }
@@ -162,10 +175,10 @@ export default function Debts(){
       await api.addDebtPayment(debt.id,{
         amount,
         paid_at:new Date().toISOString(),
-        note:'Recorded in Ledger debt tracker',
+        note:'Recorded in Ledger liability tracker',
       })
-      setPayment({...payment,[debt.id]:''})
-      setNotice('Debt payment recorded and outstanding balance updated.')
+      setPayment(current=>({...current,[debt.id]:''}))
+      setNotice('Payment recorded and outstanding balance updated.')
       await load()
     }catch(e:any){
       setError(e.message||'Could not record payment.')
@@ -175,13 +188,14 @@ export default function Debts(){
   }
 
   async function closeDebt(debt:Debt){
+    if(!window.confirm(`Mark ${debt.lender} as closed with ₹0 outstanding?`))return
     setBusy('close:'+debt.id);setError('');setNotice('')
     try{
       await api.updateDebt(debt.id,{status:'closed',outstanding_balance:0})
-      setNotice('Debt marked closed.')
+      setNotice('Liability marked closed.')
       await load()
     }catch(e:any){
-      setError(e.message||'Could not close debt.')
+      setError(e.message||'Could not close liability.')
     }finally{
       setBusy('')
     }
@@ -190,96 +204,191 @@ export default function Debts(){
   const active=useMemo(()=>data.items.filter(d=>d.status==='active'),[data.items])
   const closed=useMemo(()=>data.items.filter(d=>d.status!=='active'),[data.items])
 
-  function debtCard(debt:Debt){
-    const editing=editId===debt.id
-    const isCard=debt.debt_type==='credit_card'
-    return <Paper key={debt.id} sx={{...clay,p:{xs:1.35,sm:1.8}}}>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-        <Box sx={{minWidth:0}}>
-          <Typography variant="body1" sx={{fontWeight:800,overflowWrap:'anywhere'}}>{debt.lender}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {isCard?'Credit card':'Loan'} · {debt.status} · {debt.source_type.replace('_',' ')}
-          </Typography>
-        </Box>
-        <Chip size="small" color={debt.status==='active'?'primary':'default'} label={money(debt.outstanding_balance)}/>
-      </Stack>
+  function liabilityFields(
+    values:ReturnType<typeof emptyForm>,
+    setValues:(value:ReturnType<typeof emptyForm>)=>void,
+  ){
+    const isCard=values.debt_type==='credit_card'
+    return <Box sx={{
+      display:'grid',
+      gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},
+      columnGap:1.5,
+      rowGap:1.5,
+      mt:.5,
+    }}>
+      <TextField
+        label={isCard?'Card issuer / name':'Lender'}
+        value={values.lender}
+        onChange={e=>setValues({...values,lender:e.target.value})}
+      />
+      <TextField
+        select
+        label="Liability type"
+        value={values.debt_type}
+        onChange={e=>setValues({...values,debt_type:e.target.value})}
+      >
+        <MenuItem value="loan">Loan</MenuItem>
+        <MenuItem value="credit_card">Credit card</MenuItem>
+      </TextField>
+      <TextField
+        label={isCard?'Credit limit / original balance (optional)':'Principal (optional)'}
+        type="number"
+        value={values.principal}
+        onChange={e=>setValues({...values,principal:e.target.value})}
+      />
+      <TextField
+        label="Outstanding balance"
+        type="number"
+        value={values.outstanding_balance}
+        onChange={e=>setValues({...values,outstanding_balance:e.target.value})}
+      />
+      <TextField
+        label={isCard?'APR / interest rate %':'Interest rate %'}
+        type="number"
+        value={values.interest_rate}
+        onChange={e=>setValues({...values,interest_rate:e.target.value})}
+      />
+      <TextField
+        label={isCard?'Minimum due':'EMI'}
+        type="number"
+        value={values.emi_amount}
+        onChange={e=>setValues({...values,emi_amount:e.target.value})}
+      />
+      <TextField
+        label="Start date"
+        type="date"
+        InputLabelProps={{shrink:true}}
+        value={values.start_date}
+        onChange={e=>setValues({...values,start_date:e.target.value})}
+      />
+      <TextField
+        label="End date"
+        type="date"
+        InputLabelProps={{shrink:true}}
+        value={values.end_date}
+        onChange={e=>setValues({...values,end_date:e.target.value})}
+      />
+      <TextField
+        label="Next due date"
+        type="date"
+        InputLabelProps={{shrink:true}}
+        value={values.next_due_date}
+        onChange={e=>setValues({...values,next_due_date:e.target.value})}
+      />
+      <TextField
+        label="Notes"
+        multiline
+        minRows={2}
+        value={values.notes}
+        onChange={e=>setValues({...values,notes:e.target.value})}
+      />
+    </Box>
+  }
 
-      {editing?<Box sx={{
-        display:'grid',
-        gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},
-        columnGap:1.5,
-        rowGap:1.5,
-        mt:1.5,
-      }}>
-        <TextField label={isCard?'Card issuer / name':'Lender'} value={editForm.lender} onChange={e=>setEditForm({...editForm,lender:e.target.value})}/>
-        <TextField select label="Liability type" value={editForm.debt_type} onChange={e=>setEditForm({...editForm,debt_type:e.target.value})}>
-          <MenuItem value="loan">Loan</MenuItem>
-          <MenuItem value="credit_card">Credit card</MenuItem>
-        </TextField>
-        <TextField label={isCard?'Credit limit / original balance':'Principal'} type="number" value={editForm.principal} onChange={e=>setEditForm({...editForm,principal:e.target.value})}/>
-        <TextField label="Outstanding balance" type="number" value={editForm.outstanding_balance} onChange={e=>setEditForm({...editForm,outstanding_balance:e.target.value})}/>
-        <TextField label={isCard?'APR / interest rate %':'Interest rate %'} type="number" value={editForm.interest_rate} onChange={e=>setEditForm({...editForm,interest_rate:e.target.value})}/>
-        <TextField label={isCard?'Minimum due':'EMI'} type="number" value={editForm.emi_amount} onChange={e=>setEditForm({...editForm,emi_amount:e.target.value})}/>
-        <TextField label="Start date" type="date" InputLabelProps={{shrink:true}} value={editForm.start_date} onChange={e=>setEditForm({...editForm,start_date:e.target.value})}/>
-        <TextField label="End date" type="date" InputLabelProps={{shrink:true}} value={editForm.end_date} onChange={e=>setEditForm({...editForm,end_date:e.target.value})}/>
-        <TextField label="Next due date" type="date" InputLabelProps={{shrink:true}} value={editForm.next_due_date} onChange={e=>setEditForm({...editForm,next_due_date:e.target.value})}/>
-        <TextField label="Notes" multiline minRows={2} value={editForm.notes} onChange={e=>setEditForm({...editForm,notes:e.target.value})}/>
-        <Stack direction="row" spacing={1} sx={{gridColumn:{sm:'1 / -1'}}}>
-          <Button variant="contained" startIcon={<SaveRoundedIcon/>} onClick={()=>saveEdit(debt)} disabled={busy==='edit:'+debt.id}>Save</Button>
-          <Button onClick={()=>setEditId(null)}>Cancel</Button>
-        </Stack>
-      </Box>:<>
-        <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',sm:'repeat(4,1fr)'},gap:1.25,mt:1.4}}>
-          <Box><Typography variant="caption" color="text.secondary">{isCard?'Limit / original':'Principal'}</Typography><Typography variant="body2" sx={{fontWeight:700}}>{money(debt.principal)}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">{isCard?'APR':'Rate'}</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">{isCard?'Minimum due':'EMI'}</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.emi_amount!=null?money(debt.emi_amount):'—'}</Typography></Box>
-          <Box><Typography variant="caption" color="text.secondary">Next due</Typography><Typography variant="body2" sx={{fontWeight:700}}>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</Typography></Box>
-        </Box>
-        {debt.notes&&<Typography variant="body2" color="text.secondary" sx={{mt:1.1,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{debt.notes}</Typography>}
-      </>}
-
-      {!editing&&<>
-        <Divider sx={{my:1.25}}/>
-        <Stack direction={{xs:'column',sm:'row'}} spacing={1}>
-          {debt.status==='active'&&<>
-            <TextField
-              label="Record payment"
-              type="number"
-              value={payment[debt.id]||''}
-              onChange={e=>setPayment({...payment,[debt.id]:e.target.value})}
-              inputProps={{min:0,step:.01,inputMode:'decimal'}}
-              sx={{flex:1}}
-            />
-            <Button variant="contained" startIcon={<PaidRoundedIcon/>} disabled={busy==='payment:'+debt.id||!Number(payment[debt.id]||0)} onClick={()=>addPayment(debt)}>
-              Add payment
-            </Button>
-            <Button disabled={busy==='close:'+debt.id} onClick={()=>closeDebt(debt)}>Close</Button>
-          </>}
-          <Button startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(debt)}>Edit</Button>
-          <Button color="error" startIcon={<DeleteOutlineRoundedIcon/>} disabled={busy==='delete:'+debt.id} onClick={()=>deleteDebt(debt)}>Delete</Button>
-        </Stack>
-      </>}
-
-      {debt.payments?.length>0&&<Box sx={{mt:1.25}}>
-        <Typography variant="caption" color="text.secondary">RECENT PAYMENTS</Typography>
-        <Stack spacing={0.6} sx={{mt:.5}}>
-          {debt.payments.slice(0,3).map(p=><Stack key={p.id} direction="row" justifyContent="space-between">
-            <Typography variant="caption">{new Date(p.paid_at).toLocaleDateString('en-IN')}</Typography>
-            <Typography variant="caption" sx={{fontWeight:700}}>{money(p.amount)}</Typography>
-          </Stack>)}
-        </Stack>
-      </Box>}
-    </Paper>
+  function liabilityTable(rows:Debt[],activeRows:boolean){
+    return <TableContainer component={Paper} sx={{...clay,overflowX:'auto'}}>
+      <Table size="small" sx={{minWidth:activeRows?1120:760}}>
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{fontWeight:800}}>Liability</TableCell>
+            <TableCell sx={{fontWeight:800}}>Type</TableCell>
+            <TableCell sx={{fontWeight:800}} align="right">Outstanding</TableCell>
+            <TableCell sx={{fontWeight:800}} align="right">Rate / APR</TableCell>
+            <TableCell sx={{fontWeight:800}} align="right">EMI / Min due</TableCell>
+            <TableCell sx={{fontWeight:800}}>Next due</TableCell>
+            {activeRows&&<TableCell sx={{fontWeight:800,minWidth:210}}>Record payment</TableCell>}
+            <TableCell sx={{fontWeight:800,minWidth:190}}>Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map(debt=>{
+            const isCard=debt.debt_type==='credit_card'
+            const recentPayment=debt.payments?.[0]
+            return <TableRow key={debt.id} hover>
+              <TableCell>
+                <Typography variant="body2" fontWeight={800}>{debt.lender}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {debt.source_type.replace('_',' ')}
+                  {recentPayment?` · last payment ${money(recentPayment.amount)}`:''}
+                </Typography>
+              </TableCell>
+              <TableCell>
+                <Chip size="small" variant="outlined" label={isCard?'Credit card':'Loan'}/>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" fontWeight={800}>{money(debt.outstanding_balance)}</Typography>
+              </TableCell>
+              <TableCell align="right">{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</TableCell>
+              <TableCell align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
+              <TableCell>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
+              {activeRows&&<TableCell>
+                <Stack direction="row" spacing=.75 alignItems="center">
+                  <TextField
+                    size="small"
+                    type="number"
+                    placeholder="Amount"
+                    value={payment[debt.id]||''}
+                    onChange={e=>setPayment(current=>({...current,[debt.id]:e.target.value}))}
+                    inputProps={{min:0,step:.01,inputMode:'decimal'}}
+                    sx={{width:110}}
+                  />
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<PaidRoundedIcon/>}
+                    disabled={busy==='payment:'+debt.id||!Number(payment[debt.id]||0)}
+                    onClick={()=>addPayment(debt)}
+                  >
+                    Pay
+                  </Button>
+                </Stack>
+              </TableCell>}
+              <TableCell>
+                <Stack direction="row" spacing=.5>
+                  <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(debt)}>Edit</Button>
+                  {activeRows&&<Button size="small" disabled={busy==='close:'+debt.id} onClick={()=>closeDebt(debt)}>Close</Button>}
+                  <Button
+                    size="small"
+                    color="error"
+                    startIcon={<DeleteOutlineRoundedIcon/>}
+                    disabled={busy==='delete:'+debt.id}
+                    onClick={()=>deleteDebt(debt)}
+                  >
+                    Delete
+                  </Button>
+                </Stack>
+              </TableCell>
+            </TableRow>
+          })}
+          {!rows.length&&<TableRow>
+            <TableCell colSpan={activeRows?8:7}>
+              <Typography variant="body2" color="text.secondary" sx={{py:2,textAlign:'center'}}>
+                {activeRows?'No active liabilities yet.':'No closed or paused liabilities.'}
+              </Typography>
+            </TableCell>
+          </TableRow>}
+        </TableBody>
+      </Table>
+    </TableContainer>
   }
 
   return <Stack spacing={{xs:1.4,sm:2}}>
-    <Box>
-      <Typography variant="overline" color="text.secondary">LIABILITIES</Typography>
-      <Typography variant="h1">Liability tracker</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
-        Track loans and credit-card outstanding in one place. Loan-document imports are under Import → Debt.
-      </Typography>
-    </Box>
+    <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'flex-start',sm:'flex-end'}} spacing={1}>
+      <Box>
+        <Typography variant="overline" color="text.secondary">LIABILITIES</Typography>
+        <Typography variant="h1">Liability tracker</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
+          Track loans and credit-card outstanding in one place. Loan-document imports are under Import → Debt.
+        </Typography>
+      </Box>
+      <Button
+        variant="contained"
+        startIcon={<AddRoundedIcon/>}
+        onClick={()=>{setForm(emptyForm());setAddOpen(true);setError('');setNotice('')}}
+      >
+        Add liability
+      </Button>
+    </Stack>
 
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr 1fr',lg:'repeat(4,1fr)'},gap:1}}>
       {[
@@ -296,56 +405,27 @@ export default function Debts(){
     {error&&<Alert severity="error">{error}</Alert>}
     {notice&&<Alert severity="success">{notice}</Alert>}
 
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'minmax(0,1fr) 340px'},gap:{xs:1.4,sm:2}}}>
-      <Stack spacing={1.4}>
-        <Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
-          <Typography variant="h2">Add loan or credit card</Typography>
-          <Box sx={{
-            display:'grid',
-            gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},
-            columnGap:1.5,
-            rowGap:1.5,
-            mt:1.5,
-          }}>
-            <TextField label={form.debt_type==='credit_card'?'Card issuer / name':'Lender'} value={form.lender} onChange={e=>setForm({...form,lender:e.target.value})}/>
-            <TextField select label="Liability type" value={form.debt_type} onChange={e=>setForm({...form,debt_type:e.target.value})}>
-              <MenuItem value="loan">Loan</MenuItem>
-              <MenuItem value="credit_card">Credit card</MenuItem>
-            </TextField>
-            <TextField label={form.debt_type==='credit_card'?'Credit limit / original balance (optional)':'Principal (optional)'} type="number" value={form.principal} onChange={e=>setForm({...form,principal:e.target.value})}/>
-            <TextField label="Outstanding balance" type="number" value={form.outstanding_balance} onChange={e=>setForm({...form,outstanding_balance:e.target.value})}/>
-            <TextField label={form.debt_type==='credit_card'?'APR / interest rate %':'Interest rate %'} type="number" value={form.interest_rate} onChange={e=>setForm({...form,interest_rate:e.target.value})}/>
-            <TextField label={form.debt_type==='credit_card'?'Minimum due':'EMI'} type="number" value={form.emi_amount} onChange={e=>setForm({...form,emi_amount:e.target.value})}/>
-            <TextField label="Start date" type="date" InputLabelProps={{shrink:true}} value={form.start_date} onChange={e=>setForm({...form,start_date:e.target.value})}/>
-            <TextField label="End date" type="date" InputLabelProps={{shrink:true}} value={form.end_date} onChange={e=>setForm({...form,end_date:e.target.value})}/>
-            <TextField label="Next due date" type="date" InputLabelProps={{shrink:true}} value={form.next_due_date} onChange={e=>setForm({...form,next_due_date:e.target.value})}/>
-            <TextField label="Notes" multiline minRows={2} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/>
-          </Box>
-          <Button variant="contained" sx={{mt:1.5}} disabled={busy==='create'||!form.lender.trim()||!form.outstanding_balance} onClick={createDebt}>
-            {busy==='create'?'Saving…':form.debt_type==='credit_card'?'Add credit card':'Add loan'}
-          </Button>
-        </Paper>
+    <Typography variant="h2">Active liabilities</Typography>
+    {liabilityTable(active,true)}
 
-        <Typography variant="h2">Active liabilities</Typography>
-        {active.map(debtCard)}
-        {!active.length&&<Paper sx={{...clay,p:1.5}}><Typography variant="body2" color="text.secondary">No active debts yet.</Typography></Paper>}
+    {closed.length>0&&<>
+      <Typography variant="h2" sx={{mt:1}}>Closed / paused</Typography>
+      {liabilityTable(closed,false)}
+    </>}
 
-        {closed.length>0&&<>
-          <Typography variant="h2" sx={{mt:1}}>Closed / paused</Typography>
-          {closed.map(debtCard)}
-        </>}
-      </Stack>
-
-      <Paper sx={{...clay,p:{xs:1.4,sm:1.8},height:'fit-content'}}>
-        <AutoAwesomeRoundedIcon color="primary"/>
-        <Typography variant="h2" sx={{mt:.7}}>Finance guidance</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{mt:.5}}>
-          Ledger AI can use your calculated income, spending, loan EMIs, credit-card outstanding and minimum dues to explain repayment pressure and suggest a practical finance plan.
-        </Typography>
+    <Paper sx={{...clay,p:{xs:1.4,sm:1.8}}}>
+      <Stack direction={{xs:'column',md:'row'}} justifyContent="space-between" alignItems={{md:'center'}} spacing={1.25}>
+        <Box>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <AutoAwesomeRoundedIcon color="primary"/>
+            <Typography variant="h2">Finance guidance</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{mt:.5,maxWidth:760}}>
+            Ledger AI can use your calculated income, spending, loan EMIs, credit-card outstanding and minimum dues to explain repayment pressure and suggest a practical finance plan.
+          </Typography>
+        </Box>
         <Button
-          fullWidth
           variant="outlined"
-          sx={{mt:1.3}}
           onClick={()=>{
             sessionStorage.setItem('ledger_ai_prompt','How can I improve my finances and reduce my loans and credit-card outstanding based on my income, spending, EMIs and minimum dues?')
             navigate('/ai')
@@ -353,7 +433,52 @@ export default function Debts(){
         >
           Ask AI for a debt plan
         </Button>
-      </Paper>
-    </Box>
+      </Stack>
+    </Paper>
+
+    <Dialog
+      open={addOpen}
+      onClose={busy==='create'?undefined:()=>setAddOpen(false)}
+      fullWidth
+      maxWidth="md"
+    >
+      <DialogTitle>Add loan or credit card</DialogTitle>
+      <DialogContent>
+        {liabilityFields(form,setForm)}
+      </DialogContent>
+      <DialogActions sx={{p:2}}>
+        <Button onClick={()=>setAddOpen(false)} disabled={busy==='create'}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={createDebt}
+          disabled={busy==='create'||!form.lender.trim()||!form.outstanding_balance}
+        >
+          {busy==='create'?'Saving…':form.debt_type==='credit_card'?'Add credit card':'Add loan'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    <Dialog
+      open={editId!==null}
+      onClose={busy.startsWith('edit:')?undefined:()=>setEditId(null)}
+      fullWidth
+      maxWidth="md"
+    >
+      <DialogTitle>Edit liability</DialogTitle>
+      <DialogContent>
+        {liabilityFields(editForm,setEditForm)}
+      </DialogContent>
+      <DialogActions sx={{p:2}}>
+        <Button onClick={()=>setEditId(null)} disabled={busy.startsWith('edit:')}>Cancel</Button>
+        <Button
+          variant="contained"
+          startIcon={<SaveRoundedIcon/>}
+          onClick={saveEdit}
+          disabled={!editForm.lender.trim()||!editForm.outstanding_balance||busy.startsWith('edit:')}
+        >
+          {busy.startsWith('edit:')?'Saving…':'Save changes'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   </Stack>
 }
