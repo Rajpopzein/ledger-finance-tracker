@@ -366,7 +366,9 @@ def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(
         cash=Account(user_id=user_id,name="Cash",institution="Cash",type="cash",is_active=True)
         db.add(cash); db.flush()
 
-    fp=fingerprint(cash.id, body.txn_at, body.amount, "debit", body.note or body.category)
+    direction=body.direction
+    txn_type="income" if direction=="credit" else "cash_expense"
+    fp=fingerprint(cash.id, body.txn_at, body.amount, direction, body.note or body.category)
     existing=db.scalar(
         select(Transaction)
         .join(TransactionSource, TransactionSource.transaction_id==Transaction.id)
@@ -387,8 +389,8 @@ def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(
         category_id=category.id,
         txn_at=body.txn_at,
         amount=body.amount,
-        direction="debit",
-        txn_type="cash_expense",
+        direction=direction,
+        txn_type=txn_type,
         payment_method="cash",
         merchant=body.note or body.category,
         description_raw=body.note,
