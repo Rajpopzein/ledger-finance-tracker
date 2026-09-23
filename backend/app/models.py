@@ -171,3 +171,27 @@ class ShortcutToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class InvestmentHolding(Base):
+    __tablename__ = "investment_holdings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "platform", "symbol", name="uq_investment_user_platform_symbol"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    platform: Mapped[str] = mapped_column(String(50), default="Manual", index=True)
+    asset_type: Mapped[str] = mapped_column(String(40), default="equity")
+    symbol: Mapped[str] = mapped_column(String(80))
+    name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    isin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("0"))
+    average_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    invested_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    current_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+    current_value: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    as_of_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(30), default="manual")
+    source_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
