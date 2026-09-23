@@ -41,6 +41,7 @@ const dateQs=(from?:string,to?:string)=>{
 
 export const api={
  authStatus:()=>req<any>('/auth/status'),
+ bootstrap:()=>req<any>('/bootstrap'),
  signup:(name:string,handle:string,email:string,password:string)=>req<any>('/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,handle,email,password})}),
  login:async(email:string,password:string)=>{
    const result=await req<any>('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})})
