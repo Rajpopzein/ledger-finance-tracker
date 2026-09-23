@@ -98,7 +98,7 @@ export default function FinanceResponse({text}:{text:string}){
         i++
       }
       blocks.push(
-        <Stack key={`bullets-${i}`} component="ul" spacing=.65 sx={{pl:2.5,my:.25}}>
+        <Stack key={`bullets-${i}`} component="ul" spacing={0.65} sx={{pl:2.5,my:.25}}>
           {items.map((item,index)=><Typography component="li" variant="body2" key={index} sx={{lineHeight:1.7}}>
             {inline(item)}
           </Typography>)}
@@ -117,7 +117,7 @@ export default function FinanceResponse({text}:{text:string}){
         i++
       }
       blocks.push(
-        <Stack key={`numbers-${i}`} component="ol" spacing=.7 sx={{pl:2.8,my:.25}}>
+        <Stack key={`numbers-${i}`} component="ol" spacing={0.7} sx={{pl:2.8,my:.25}}>
           {items.map((item,index)=><Typography component="li" variant="body2" key={index} sx={{lineHeight:1.7}}>
             {inline(item)}
           </Typography>)}
@@ -158,7 +158,7 @@ export default function FinanceResponse({text}:{text:string}){
 
 export function FinanceHighlights({items}:{items:{label:string;value:string}[]}){
   if(!items.length)return null
-  return <Stack direction="row" gap=.75 sx={{flexWrap:'wrap'}}>
+  return <Stack direction="row" gap={0.75} sx={{flexWrap:'wrap'}}>
     {items.map(item=><Chip
       key={item.label}
       variant="outlined"
