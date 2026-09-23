@@ -44,7 +44,7 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:{xs:1.25,sm:2}}}>
       <Box><Typography variant="overline" color="text.secondary">6 MONTHS</Typography><Typography variant="h2">Cash flow</Typography></Box>
       <Stack direction="row" spacing={1}>
-        <Chip size="small" label="Income" color="primary" variant="outlined"/>
+        <Chip size="small" label="Opening + income" color="primary" variant="outlined"/>
         <Chip size="small" label="Spent" color="secondary" variant="outlined"/>
       </Stack>
     </Stack>
@@ -67,7 +67,7 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
           >
             <Stack direction="row" alignItems="flex-end" spacing={0.45} sx={{height:150}}>
               <Box
-                title={`Income ${money(m.income)}`}
+                title={`Resources ${money(m.income)} · Opening ${money(m.opening_balance)} + New income ${money(m.new_income)}`}
                 sx={{
                   width:{xs:7,sm:10},
                   height:`${Math.max(3,m.income/max*145)}px`,
@@ -245,7 +245,13 @@ export default function Overview(){
   </Paper>
 
   const metrics=<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'repeat(3,1fr)'},gap:{xs:1.15,sm:2}}}>
-    <MetricCard mode={resolvedMode} label="INCOME" value={money(s.income)} sub="Qualifying inflows" icon={<TrendingUpRoundedIcon/>}/>
+    <MetricCard
+      mode={resolvedMode}
+      label="INCOME RESOURCES"
+      value={money(s.income)}
+      sub={`Opening ${money(s.opening_balance)} + new income ${money(s.new_income)}`}
+      icon={<TrendingUpRoundedIcon/>}
+    />
     <MetricCard mode={resolvedMode} label="SPENT" value={money(s.spent)} sub="Transfers excluded" icon={<TrendingDownRoundedIcon/>}/>
     <MetricCard mode={resolvedMode} label="LEDGER ITEMS" value={String(s.total)} sub={s.needs_review?`${s.needs_review} need review`:'All clear'} icon={<AccountBalanceWalletRoundedIcon/>}/>
   </Box>
