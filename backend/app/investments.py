@@ -317,9 +317,9 @@ def delete_investment(
 
 @router.post("/api/investments/import/preview")
 async def preview_investments(
+    request: Request,
     platform: str = Form(...),
     file: UploadFile = File(...),
-    request: Request = None,
     db: Session = Depends(get_db),
 ):
     current_user_id(request)
@@ -356,9 +356,9 @@ async def preview_investments(
 
 @router.post("/api/investments/import/commit")
 async def commit_investments(
+    request: Request,
     platform: str = Form(...),
     file: UploadFile = File(...),
-    request: Request = None,
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
