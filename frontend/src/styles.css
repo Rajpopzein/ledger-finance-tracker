@@ -197,3 +197,16 @@ img,svg,canvas{max-width:100%}
   .card{padding:14px}
   .page-head h1{font-size:24px}
 }
+
+
+/* Native/web safe areas for portal-based dialogs and mobile system UI */
+.MuiDialog-root .MuiDialog-container{
+  box-sizing:border-box;
+  padding-top:max(8px,var(--safe-area-top));
+  padding-right:max(8px,var(--safe-area-right));
+  padding-bottom:max(8px,var(--safe-area-bottom));
+  padding-left:max(8px,var(--safe-area-left));
+}
+.MuiDialog-root .MuiDialog-paper{
+  max-height:calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 16px);
+}
