@@ -5,18 +5,15 @@ import {
   Button,
   Chip,
   Divider,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
-import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import type {InvestmentHolding,InvestmentList} from '../types'
 import {api} from '../api/client'
 import {claySx,useUI} from '../ui'
@@ -39,9 +36,8 @@ export default function Investments(){
   const clay=claySx(resolvedMode)
   const [data,setData]=useState<InvestmentList>({items:[],invested_amount:0,current_value:0,pnl:0,count:0})
   const [form,setForm]=useState(emptyForm())
-  const [platform,setPlatform]=useState('Groww')
-  const [file,setFile]=useState<File|null>(null)
-  const [preview,setPreview]=useState<any>(null)
+  const [editId,setEditId]=useState<number|null>(null)
+  const [editForm,setEditForm]=useState(emptyForm())
   const [busy,setBusy]=useState('')
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
@@ -93,37 +89,56 @@ export default function Investments(){
     }
   }
 
-  async function inspect(selected:File){
-    setFile(selected);setPreview(null);setError('');setNotice('');setBusy('preview')
-    try{
-      setPreview(await api.investmentPreview(platform,selected))
-    }catch(e:any){
-      setError(e.message||'Could not read this broker holdings file.')
-    }finally{
-      setBusy('')
-    }
+  function startEdit(item:InvestmentHolding){
+    setEditId(item.id)
+    setEditForm({
+      platform:item.platform||'Manual',
+      asset_type:item.asset_type||'equity',
+      symbol:item.symbol||'',
+      name:item.name||'',
+      quantity:String(item.quantity??''),
+      average_price:item.average_price!=null?String(item.average_price):'',
+      invested_amount:String(item.invested_amount??''),
+      current_price:item.current_price!=null?String(item.current_price):'',
+      current_value:item.current_value!=null?String(item.current_value):'',
+    })
+    setError('')
+    setNotice('')
   }
 
-  async function commit(){
-    if(!file)return
-    setBusy('commit');setError('');setNotice('')
+  async function saveEdit(item:InvestmentHolding){
+    if(!editForm.symbol.trim())return
+    setBusy('edit:'+item.id);setError('');setNotice('')
     try{
-      const result=await api.investmentCommit(platform,file)
-      setNotice(`Imported ${result.inserted} new holdings and updated ${result.updated} existing holdings.`)
-      setPreview(null);setFile(null)
+      await api.updateInvestment(item.id,{
+        platform:editForm.platform||'Manual',
+        asset_type:editForm.asset_type||'equity',
+        symbol:editForm.symbol.trim(),
+        name:editForm.name.trim()||null,
+        quantity:Number(editForm.quantity||0),
+        average_price:editForm.average_price?Number(editForm.average_price):null,
+        invested_amount:Number(editForm.invested_amount||0),
+        current_price:editForm.current_price?Number(editForm.current_price):null,
+        current_value:editForm.current_value?Number(editForm.current_value):null,
+        as_of_date:new Date().toISOString(),
+      })
+      setEditId(null)
+      setNotice('Investment updated.')
       await load()
     }catch(e:any){
-      setError(e.message||'Could not import holdings.')
+      setError(e.message||'Could not update investment.')
     }finally{
       setBusy('')
     }
   }
 
-  async function remove(holding:InvestmentHolding){
-    setBusy('delete:'+holding.id);setError('');setNotice('')
+  async function remove(item:InvestmentHolding){
+    if(!window.confirm(`Delete ${item.symbol} from investments?`))return
+    setBusy('delete:'+item.id);setError('');setNotice('')
     try{
-      await api.deleteInvestment(holding.id)
-      setNotice(holding.symbol+' removed.')
+      await api.deleteInvestment(item.id)
+      setNotice(item.symbol+' removed.')
+      if(editId===item.id)setEditId(null)
       await load()
     }catch(e:any){
       setError(e.message||'Could not remove investment.')
@@ -143,7 +158,7 @@ export default function Investments(){
       <Typography variant="overline" color="text.secondary">PORTFOLIO</Typography>
       <Typography variant="h1">Investments</Typography>
       <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
-        Track holdings separately from expenses. Investment purchases do not reduce the Spending metric.
+        Add and manage holdings here. Broker file imports are under Import → Investments.
       </Typography>
     </Box>
 
@@ -154,115 +169,36 @@ export default function Investments(){
         ['P&L',`${data.pnl>=0?'+':''}${money(data.pnl)}`],
       ].map(([label,value])=><Paper key={label} sx={{...clay,p:{xs:1.25,sm:1.6}}}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography sx={{fontWeight:850,fontSize:'1.25rem',mt:.2}}>{value}</Typography>
+        <Typography sx={{fontWeight:850,fontSize:'1.25rem',mt:.25}}>{value}</Typography>
       </Paper>)}
     </Box>
 
     {error&&<Alert severity="error">{error}</Alert>}
     {notice&&<Alert severity="success">{notice}</Alert>}
 
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:{xs:1.2,sm:2}}}>
-      <Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
-        <Typography variant="h2">Add manually</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{mt:.35,mb:1.2}}>
-          Add stocks, mutual funds, ETFs or other holdings yourself.
-        </Typography>
-
-        <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr'},gap:1}}>
-          <FormControl size="small">
-            <InputLabel>Platform</InputLabel>
-            <Select label="Platform" value={form.platform} onChange={e=>setForm({...form,platform:String(e.target.value)})}>
-              <MenuItem value="Manual">Manual</MenuItem>
-              <MenuItem value="Groww">Groww</MenuItem>
-              <MenuItem value="Zerodha">Zerodha</MenuItem>
-              <MenuItem value="Other">Other</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl size="small">
-            <InputLabel>Asset type</InputLabel>
-            <Select label="Asset type" value={form.asset_type} onChange={e=>setForm({...form,asset_type:String(e.target.value)})}>
-              <MenuItem value="equity">Stock / Equity</MenuItem>
-              <MenuItem value="mutual_fund">Mutual fund</MenuItem>
-              <MenuItem value="etf">ETF</MenuItem>
-              <MenuItem value="bond">Bond</MenuItem>
-              <MenuItem value="other">Other</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField label="Symbol / Scheme" value={form.symbol} onChange={e=>setForm({...form,symbol:e.target.value})}/>
-          <TextField label="Name (optional)" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
-          <TextField label="Quantity / Units" type="number" value={form.quantity} onChange={e=>setForm({...form,quantity:e.target.value})}/>
-          <TextField label="Average price / NAV" type="number" value={form.average_price} onChange={e=>setForm({...form,average_price:e.target.value})}/>
-          <TextField label="Invested amount" type="number" value={form.invested_amount} onChange={e=>setForm({...form,invested_amount:e.target.value})} helperText="Optional when quantity × average price is available."/>
-          <TextField label="Current price / NAV" type="number" value={form.current_price} onChange={e=>setForm({...form,current_price:e.target.value})}/>
-          <TextField label="Current value" type="number" value={form.current_value} onChange={e=>setForm({...form,current_value:e.target.value})} helperText="Optional when quantity × current price is available."/>
-        </Box>
-
-        <Button
-          variant="contained"
-          startIcon={<AddRoundedIcon/>}
-          onClick={addManual}
-          disabled={busy==='manual'||!form.symbol.trim()}
-          sx={{mt:1.2}}
-        >
-          {busy==='manual'?'Adding…':'Add investment'}
-        </Button>
-      </Paper>
-
-      <Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
-        <Typography variant="h2">Import broker holdings</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{mt:.35,mb:1.2}}>
-          Import holdings exports from Groww, Zerodha or another broker. Supported files: CSV, XLSX and XLS.
-        </Typography>
-
-        <FormControl size="small" fullWidth sx={{mb:1}}>
-          <InputLabel>Broker / platform</InputLabel>
-          <Select label="Broker / platform" value={platform} onChange={e=>{setPlatform(String(e.target.value));setPreview(null);setFile(null)}}>
-            <MenuItem value="Groww">Groww</MenuItem>
-            <MenuItem value="Zerodha">Zerodha</MenuItem>
-            <MenuItem value="Other">Other</MenuItem>
-          </Select>
-        </FormControl>
-
-        <Button
-          component="label"
-          variant="outlined"
-          startIcon={<CloudUploadRoundedIcon/>}
-          disabled={busy==='preview'||busy==='commit'}
-          sx={{minHeight:88,width:'100%',borderStyle:'dashed'}}
-        >
-          {busy==='preview'?'Reading holdings…':file?file.name:'Choose holdings file'}
-          <input
-            hidden
-            type="file"
-            accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={e=>{
-              const selected=e.target.files?.[0]
-              if(selected)inspect(selected)
-              e.currentTarget.value=''
-            }}
-          />
-        </Button>
-
-        {preview&&<Box sx={{mt:1.2}}>
-          <Box sx={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:.75}}>
-            <Box><Typography variant="caption" color="text.secondary">Holdings</Typography><Typography sx={{fontWeight:800}}>{preview.detected}</Typography></Box>
-            <Box><Typography variant="caption" color="text.secondary">Invested</Typography><Typography sx={{fontWeight:800}}>{money(preview.invested_amount)}</Typography></Box>
-            <Box><Typography variant="caption" color="text.secondary">Current</Typography><Typography sx={{fontWeight:800}}>{money(preview.current_value)}</Typography></Box>
-          </Box>
-          <Alert severity="info" sx={{mt:1}}>
-            Importing again updates matching {platform} symbols instead of creating duplicate holdings.
-          </Alert>
-          <Button variant="contained" onClick={commit} disabled={busy==='commit'} sx={{mt:1}}>
-            {busy==='commit'?'Importing…':'Import holdings'}
-          </Button>
-        </Box>}
-
-        <Divider sx={{my:1.5}}/>
-        <Typography variant="caption" color="text.secondary">
-          The importer searches the first rows for common broker columns such as Symbol/Instrument, Quantity, Avg Price, Invested Amount, LTP and Current Value.
-        </Typography>
-      </Paper>
-    </Box>
+    <Paper sx={{...clay,p:{xs:1.4,sm:1.9}}}>
+      <Typography variant="h2">Add investment manually</Typography>
+      <Box sx={{
+        display:'grid',
+        gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr',lg:'repeat(3,1fr)'},
+        columnGap:1.5,
+        rowGap:1.5,
+        mt:1.5,
+      }}>
+        <TextField label="Platform" value={form.platform} onChange={e=>setForm({...form,platform:e.target.value})}/>
+        <TextField label="Asset type" value={form.asset_type} onChange={e=>setForm({...form,asset_type:e.target.value})}/>
+        <TextField label="Symbol" value={form.symbol} onChange={e=>setForm({...form,symbol:e.target.value.toUpperCase()})}/>
+        <TextField label="Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
+        <TextField label="Quantity" type="number" value={form.quantity} onChange={e=>setForm({...form,quantity:e.target.value})}/>
+        <TextField label="Average price" type="number" value={form.average_price} onChange={e=>setForm({...form,average_price:e.target.value})}/>
+        <TextField label="Invested amount" type="number" value={form.invested_amount} onChange={e=>setForm({...form,invested_amount:e.target.value})}/>
+        <TextField label="Current price" type="number" value={form.current_price} onChange={e=>setForm({...form,current_price:e.target.value})}/>
+        <TextField label="Current value" type="number" value={form.current_value} onChange={e=>setForm({...form,current_value:e.target.value})}/>
+      </Box>
+      <Button variant="contained" startIcon={<AddRoundedIcon/>} sx={{mt:1.5}} onClick={addManual} disabled={busy==='manual'||!form.symbol.trim()}>
+        {busy==='manual'?'Saving…':'Add investment'}
+      </Button>
+    </Paper>
 
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:1}}>
@@ -274,44 +210,61 @@ export default function Investments(){
         {Object.entries(byPlatform).map(([broker,items])=><Paper key={broker} sx={{...clay,p:{xs:1.25,sm:1.6}}}>
           <Typography variant="overline" color="text.secondary">{broker}</Typography>
           <Stack divider={<Divider/>} sx={{mt:.4}}>
-            {items.map(item=><Box key={item.id} sx={{
-              py:1,
-              display:'grid',
-              gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(0,1.4fr) .7fr .8fr .8fr auto'},
-              gap:1,
-              alignItems:'center',
-            }}>
-              <Box sx={{minWidth:0}}>
-                <Typography variant="body2" sx={{fontWeight:800,overflowWrap:'anywhere'}}>{item.symbol}</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{display:'block',overflowWrap:'anywhere'}}>
-                  {item.name||item.asset_type} · {item.quantity.toLocaleString('en-IN')} units
-                </Typography>
+            {items.map(item=>{
+              const editing=editId===item.id
+              return <Box key={item.id} sx={{py:1}}>
+                {editing?<Box sx={{
+                  display:'grid',
+                  gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr',lg:'repeat(3,1fr)'},
+                  columnGap:1.5,
+                  rowGap:1.5,
+                }}>
+                  <TextField label="Platform" value={editForm.platform} onChange={e=>setEditForm({...editForm,platform:e.target.value})}/>
+                  <TextField label="Asset type" value={editForm.asset_type} onChange={e=>setEditForm({...editForm,asset_type:e.target.value})}/>
+                  <TextField label="Symbol" value={editForm.symbol} onChange={e=>setEditForm({...editForm,symbol:e.target.value.toUpperCase()})}/>
+                  <TextField label="Name" value={editForm.name} onChange={e=>setEditForm({...editForm,name:e.target.value})}/>
+                  <TextField label="Quantity" type="number" value={editForm.quantity} onChange={e=>setEditForm({...editForm,quantity:e.target.value})}/>
+                  <TextField label="Average price" type="number" value={editForm.average_price} onChange={e=>setEditForm({...editForm,average_price:e.target.value})}/>
+                  <TextField label="Invested amount" type="number" value={editForm.invested_amount} onChange={e=>setEditForm({...editForm,invested_amount:e.target.value})}/>
+                  <TextField label="Current price" type="number" value={editForm.current_price} onChange={e=>setEditForm({...editForm,current_price:e.target.value})}/>
+                  <TextField label="Current value" type="number" value={editForm.current_value} onChange={e=>setEditForm({...editForm,current_value:e.target.value})}/>
+                  <Stack direction="row" spacing={1} sx={{gridColumn:{sm:'1 / -1'}}}>
+                    <Button variant="contained" startIcon={<SaveRoundedIcon/>} onClick={()=>saveEdit(item)} disabled={busy==='edit:'+item.id}>Save</Button>
+                    <Button onClick={()=>setEditId(null)}>Cancel</Button>
+                  </Stack>
+                </Box>:<Box sx={{
+                  display:'grid',
+                  gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(0,1.4fr) .7fr .8fr .8fr auto'},
+                  gap:1,
+                  alignItems:'center',
+                }}>
+                  <Box sx={{minWidth:0}}>
+                    <Typography variant="body2" sx={{fontWeight:800,overflowWrap:'anywhere'}}>{item.symbol}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{display:'block',overflowWrap:'anywhere'}}>
+                      {item.name||item.asset_type} · {item.quantity.toLocaleString('en-IN')} units
+                    </Typography>
+                  </Box>
+                  <Box sx={{display:{xs:'none',sm:'block'}}}>
+                    <Typography variant="caption" color="text.secondary">Invested</Typography>
+                    <Typography variant="body2" sx={{fontWeight:700}}>{money(item.invested_amount)}</Typography>
+                  </Box>
+                  <Box sx={{display:{xs:'none',sm:'block'}}}>
+                    <Typography variant="caption" color="text.secondary">Current</Typography>
+                    <Typography variant="body2" sx={{fontWeight:700}}>{money(item.current_value??item.invested_amount)}</Typography>
+                  </Box>
+                  <Box sx={{textAlign:{xs:'right',sm:'left'}}}>
+                    <Typography variant="caption" color="text.secondary" sx={{display:{xs:'none',sm:'block'}}}>P&L</Typography>
+                    <Typography variant="body2" sx={{fontWeight:800}} color={(item.pnl??0)>=0?'primary.main':'error.main'}>
+                      {(item.pnl??0)>=0?'+':''}{money(item.pnl??0)}
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={.5} sx={{gridColumn:{xs:'1 / -1',sm:'auto'},justifySelf:{xs:'start',sm:'end'}}}>
+                    <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(item)}>Edit</Button>
+                    <Button size="small" color="error" startIcon={<DeleteOutlineRoundedIcon/>} disabled={busy==='delete:'+item.id} onClick={()=>remove(item)}>Delete</Button>
+                  </Stack>
+                </Box>}
               </Box>
-              <Box sx={{display:{xs:'none',sm:'block'}}}>
-                <Typography variant="caption" color="text.secondary">Invested</Typography>
-                <Typography variant="body2" sx={{fontWeight:700}}>{money(item.invested_amount)}</Typography>
-              </Box>
-              <Box sx={{display:{xs:'none',sm:'block'}}}>
-                <Typography variant="caption" color="text.secondary">Current</Typography>
-                <Typography variant="body2" sx={{fontWeight:700}}>{money(item.current_value??item.invested_amount)}</Typography>
-              </Box>
-              <Box sx={{textAlign:{xs:'right',sm:'left'}}}>
-                <Typography variant="caption" color="text.secondary" sx={{display:{xs:'none',sm:'block'}}}>P&L</Typography>
-                <Typography variant="body2" sx={{fontWeight:800}} color={(item.pnl??0)>=0?'primary.main':'error.main'}>
-                  {(item.pnl??0)>=0?'+':''}{money(item.pnl??0)}
-                </Typography>
-              </Box>
-              <Button
-                size="small"
-                color="error"
-                startIcon={<DeleteOutlineRoundedIcon/>}
-                disabled={busy==='delete:'+item.id}
-                onClick={()=>remove(item)}
-                sx={{gridColumn:{xs:'1 / -1',sm:'auto'},justifySelf:{xs:'start',sm:'end'}}}
-              >
-                Remove
-              </Button>
-            </Box>)}
+            })}
           </Stack>
         </Paper>)}
 
