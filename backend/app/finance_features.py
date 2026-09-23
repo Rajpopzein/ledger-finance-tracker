@@ -12,7 +12,7 @@ from .models import Account, Category, Debt, DebtPayment, Transaction
 from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate, TransactionUpdate
 from .services.ai import categorize_transactions, extract_debt_from_document
 from .services.dedupe import fingerprint
-from .users import current_user_id
+from .users import current_user_id, scoped_family_user_ids
 
 router = APIRouter()
 
@@ -247,6 +247,7 @@ def undo_ai_category(
 def _serialize_debt(debt: Debt, payments: list[DebtPayment] | None = None):
     return {
         "id": debt.id,
+        "user_id": debt.user_id,
         "lender": debt.lender,
         "debt_type": debt.debt_type,
         "principal": float(debt.principal),
@@ -273,16 +274,28 @@ def _serialize_debt(debt: Debt, payments: list[DebtPayment] | None = None):
     }
 
 @router.get("/api/debts")
-def list_debts(request: Request, db: Session = Depends(get_db)):
-    user_id = current_user_id(request)
+def list_debts(
+    request: Request,
+    family_scope: str = "self",
+    family_user_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    viewer_user_id = current_user_id(request)
+    user_ids = scoped_family_user_ids(
+        db,
+        viewer_user_id,
+        family_scope,
+        family_user_id,
+        "debts",
+    )
     debts = db.scalars(
         select(Debt)
-        .where(Debt.user_id == user_id)
+        .where(Debt.user_id.in_(user_ids))
         .order_by(Debt.status.asc(), Debt.created_at.desc())
     ).all()
     payments = db.scalars(
         select(DebtPayment)
-        .where(DebtPayment.user_id == user_id)
+        .where(DebtPayment.user_id.in_(user_ids))
         .order_by(DebtPayment.paid_at.desc())
     ).all()
     by_debt: dict[int, list[DebtPayment]] = {}
