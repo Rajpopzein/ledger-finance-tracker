@@ -176,7 +176,7 @@ def bill_commit(
             )
             db.add(account)
             db.flush()
-    elif body.payment_method == "upi":
+    elif body.payment_method in ("upi", "bank"):
         if body.account_id is None:
             raise HTTPException(400, "Select the bank account used to pay this bill")
         account = db.get(Account, body.account_id)
