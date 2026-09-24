@@ -496,7 +496,7 @@ export default function Overview(){
     </Box>
   </Box>
 
-  if(error)return <Alert severity="error" action={<Button onClick={load}>Try again</Button>}>{error}</Alert>
+  if(error)return <Alert severity="error" action={<Button onClick={()=>load(true)}>Try again</Button>}>{error}</Alert>
   if(!s)return null
 
   const pct=s.total?Math.round(s.verified/s.total*1000)/10:0
