@@ -22,7 +22,7 @@ from backend.app.models import (
     User,
 )
 from backend.app.planning import complete_commitment, create_internal_transfer, planning_summary
-from backend.app.schemas import InternalTransferCreate
+from backend.app.schemas import CommitmentPaymentCreate, InternalTransferCreate
 from backend.app.services.dedupe import find_match
 
 
@@ -383,3 +383,57 @@ def test_stale_monthly_debt_is_rolled_forward_without_historical_duplicates():
     assert due >= now
     assert due <= now + timedelta(days=32)
     assert summary["committed_in_horizon"] == 10000.0
+
+
+def test_paid_commitment_via_upi_creates_debit_and_reduces_available_balance():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = _bank(db, user.id, "HDFC")
+    baseline = datetime.now(timezone.utc) - timedelta(minutes=5)
+    db.add(AvailableBalance(
+        user_id=user.id,
+        bank_balance=Decimal("10000.00"),
+        cash_balance=Decimal("500.00"),
+        as_of=baseline,
+    ))
+    commitment = Commitment(
+        user_id=user.id,
+        title="Electricity bill",
+        amount=Decimal("1250.00"),
+        next_due_date=datetime.now(timezone.utc) + timedelta(days=1),
+        recurrence="one_time",
+        is_active=True,
+    )
+    db.add(commitment)
+    db.commit()
+
+    result = complete_commitment(
+        commitment.id,
+        _request(user.id),
+        db,
+        body=CommitmentPaymentCreate(
+            payment_method="upi",
+            account_id=bank.id,
+            paid_at=datetime.now(timezone.utc),
+        ),
+    )
+
+    tx = db.scalar(select(Transaction).where(
+        Transaction.user_id == user.id,
+        Transaction.merchant == "Electricity bill",
+    ))
+    assert tx is not None
+    assert tx.direction == "debit"
+    assert tx.payment_method == "upi"
+    assert tx.account_id == bank.id
+    assert tx.amount == Decimal("1250.00")
+    assert result["is_active"] is False
+    assert result["payment_transaction_id"] == tx.id
+
+    state = _current_available_balance(db, user.id)
+    assert state is not None
+    assert state["bank_balance"] == Decimal("8750.00")
+    assert state["cash_balance"] == Decimal("500.00")
+    assert state["total"] == Decimal("9250.00")
