@@ -1,5 +1,8 @@
 import calendar
 import hashlib
+import re
+from collections import defaultdict
+from statistics import median
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
@@ -479,6 +482,110 @@ def delete_commitment(
     return {"ok": True}
 
 
+def _prediction_key(value: str):
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def _prediction_label(tx: Transaction):
+    raw = (tx.merchant or tx.description_raw or "").strip()
+    if not raw:
+        return "Recurring payment"
+    cleaned = re.sub(r"\s+", " ", raw)
+    return cleaned[:80]
+
+
+def _add_months(value: datetime, months: int = 1):
+    year = value.year + ((value.month - 1 + months) // 12)
+    month = ((value.month - 1 + months) % 12) + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def _predicted_recurring_commitments(db: Session, user_id: int, now: datetime, horizon: datetime):
+    history_start = now - timedelta(days=190)
+    txs = db.scalars(
+        select(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.excluded_from_analytics == False,
+            Transaction.direction == "debit",
+            Transaction.txn_at >= history_start,
+            Transaction.txn_type.notin_(("internal_transfer", "investment", "credit_card_payment")),
+        ).order_by(Transaction.txn_at.asc())
+    ).all()
+
+    groups: dict[str, list[Transaction]] = defaultdict(list)
+    for tx in txs:
+        label = _prediction_label(tx)
+        key = _prediction_key(label)
+        if len(key) < 3:
+            continue
+        groups[key].append(tx)
+
+    predicted = []
+    for key, rows in groups.items():
+        if len(rows) < 2:
+            continue
+        rows.sort(key=lambda tx: tx.txn_at)
+        dates = [tx.txn_at if tx.txn_at.tzinfo else tx.txn_at.replace(tzinfo=timezone.utc) for tx in rows]
+        amounts = [Decimal(tx.amount) for tx in rows]
+        intervals = [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
+        if not intervals:
+            continue
+
+        typical_interval = median(intervals)
+        if not 25 <= typical_interval <= 35:
+            continue
+
+        typical_amount = Decimal(str(median([float(v) for v in amounts])))
+        if typical_amount <= 0:
+            continue
+        amount_deviation = max((abs(v - typical_amount) / typical_amount for v in amounts), default=Decimal("0"))
+        if amount_deviation > Decimal("0.20"):
+            continue
+
+        last = dates[-1]
+        next_due = _add_months(last)
+        while next_due < now - timedelta(days=3):
+            next_due = _add_months(next_due)
+        if next_due > horizon:
+            continue
+
+        interval_score = max(0.0, 1.0 - abs(float(typical_interval) - 30.0) / 10.0)
+        amount_score = max(0.0, 1.0 - float(amount_deviation))
+        history_score = min(1.0, len(rows) / 4.0)
+        confidence = round((interval_score * 0.4 + amount_score * 0.35 + history_score * 0.25), 2)
+        if confidence < 0.75:
+            continue
+
+        last_row = rows[-1]
+        predicted.append({
+            "id": f"predicted:{hashlib.sha1(key.encode('utf-8')).hexdigest()[:12]}",
+            "title": _prediction_label(last_row),
+            "amount": float(typical_amount.quantize(Decimal("0.01"))),
+            "next_due_date": next_due.isoformat(),
+            "recurrence": "monthly",
+            "category": last_row.category.name if last_row.category else None,
+            "is_active": True,
+            "notes": f"Predicted from {len(rows)} similar payments",
+            "source": "ai_predicted" if confidence < 0.90 else "recurring",
+            "confidence": confidence,
+            "history_count": len(rows),
+            "overdue": next_due < now,
+        })
+    return predicted
+
+
+def _same_commitment(a: dict, b: dict):
+    title_a = _prediction_key(a.get("title", ""))
+    title_b = _prediction_key(b.get("title", ""))
+    if title_a and title_b and (title_a in title_b or title_b in title_a):
+        amount_a = Decimal(str(a.get("amount", 0)))
+        amount_b = Decimal(str(b.get("amount", 0)))
+        base = max(amount_a, amount_b, Decimal("1"))
+        return abs(amount_a - amount_b) / base <= Decimal("0.20")
+    return False
+
+
 @router.get("/api/planning-summary")
 def planning_summary(request: Request, db: Session = Depends(get_db)):
     user_id = current_user_id(request)
@@ -524,6 +631,11 @@ def planning_summary(request: Request, db: Session = Depends(get_db)):
                 "source": "credit_card" if debt.debt_type == "credit_card" else "loan",
                 "overdue": due < now,
             })
+
+    predicted = _predicted_recurring_commitments(db, user_id, now, horizon)
+    for candidate in predicted:
+        if not any(_same_commitment(candidate, existing) for existing in upcoming):
+            upcoming.append(candidate)
 
     upcoming.sort(key=lambda item: item["next_due_date"])
     committed = sum((Decimal(str(item["amount"])) for item in upcoming), Decimal("0"))
