@@ -1,5 +1,6 @@
 import hashlib
 import re
+from decimal import Decimal
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
@@ -8,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Account, ImportBatch, Transaction, TransactionSource
+from .models import Account, ImportBatch, ReconciliationItem, Transaction, TransactionSource
 from .services.dedupe import fingerprint, find_match
 from .services.upi_importer import app_label, parse_upi_statement
 from .users import current_user_id
@@ -75,7 +76,7 @@ def _unassigned_upi_account(db: Session, user_id: int):
     return account
 
 def _existing_file_source(db: Session, user_id: int, file_hash: str, label: str):
-    return db.scalar(
+    transaction_source = db.scalar(
         select(TransactionSource.id)
         .join(Transaction, TransactionSource.transaction_id == Transaction.id)
         .where(
@@ -83,6 +84,18 @@ def _existing_file_source(db: Session, user_id: int, file_hash: str, label: str)
             TransactionSource.source_type == _source_type(),
             TransactionSource.source_name == label,
             TransactionSource.external_hash == file_hash,
+        )
+        .limit(1)
+    )
+    if transaction_source:
+        return transaction_source
+    return db.scalar(
+        select(ReconciliationItem.id)
+        .where(
+            ReconciliationItem.user_id == user_id,
+            ReconciliationItem.source_type == _source_type(),
+            ReconciliationItem.source_name == label,
+            ReconciliationItem.external_hash == file_hash,
         )
         .limit(1)
     )
@@ -319,10 +332,30 @@ async def commit_upi(
     linked = 0
     review = 0
 
-    for row in rows:
+    for row_index, row in enumerate(rows):
         match, method, score, state = _classify(db, user_id, row)
 
         if state == "review":
+            db.add(
+                ReconciliationItem(
+                    user_id=user_id,
+                    account_id=match.account_id if match and match.account_id else fallback_account.id,
+                    import_batch_id=batch.id,
+                    candidate_transaction_id=match.id if match else None,
+                    source_row_index=row_index,
+                    source_type=_source_type(),
+                    source_name=label,
+                    external_hash=file_hash,
+                    txn_at=row["txn_at"],
+                    amount=row["amount"],
+                    direction=row["direction"],
+                    description_raw=row["description"],
+                    bank_ref=row.get("upi_ref"),
+                    match_method=method,
+                    match_score=Decimal(str(score)),
+                    status="needs_review",
+                )
+            )
             review += 1
             continue
 
