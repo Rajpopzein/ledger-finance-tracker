@@ -64,6 +64,36 @@ class ManualTransactionCreate(BaseModel):
     merchant: str | None = Field(default=None, max_length=160)
     note: str | None = Field(default=None, max_length=2000)
 
+class InternalTransferCreate(BaseModel):
+    amount: Decimal = Field(gt=0)
+    from_account_id: int
+    to_account_id: int
+    txn_at: datetime
+    note: str | None = Field(default=None, max_length=2000)
+
+class BudgetUpsert(BaseModel):
+    category: str = Field(min_length=1, max_length=80)
+    monthly_limit: Decimal = Field(gt=0)
+    is_active: bool = True
+
+class CommitmentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    amount: Decimal = Field(gt=0)
+    next_due_date: datetime
+    recurrence: str = Field(default="monthly", pattern="^(monthly|one_time)$")
+    category: str | None = Field(default=None, max_length=80)
+    notes: str | None = Field(default=None, max_length=2000)
+    is_active: bool = True
+
+class CommitmentUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=160)
+    amount: Decimal | None = Field(default=None, gt=0)
+    next_due_date: datetime | None = None
+    recurrence: str | None = Field(default=None, pattern="^(monthly|one_time)$")
+    category: str | None = Field(default=None, max_length=80)
+    notes: str | None = Field(default=None, max_length=2000)
+    is_active: bool | None = None
+
 class AISettingsIn(BaseModel):
     provider: str | None = None
     base_url: str | None = None
@@ -131,10 +161,6 @@ class ReconciliationResolve(BaseModel):
 
 class MonthlyCloseCreate(BaseModel):
     month_key: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
-
-class MonthEndBalanceUpdate(BaseModel):
-    bank_balance: Decimal = Field(ge=0)
-    cash_balance: Decimal = Field(ge=0)
 
 
 class TransactionUpdate(BaseModel):
