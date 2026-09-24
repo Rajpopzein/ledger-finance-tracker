@@ -208,7 +208,7 @@ export default function BillImport(){
           </Stack>
           <Typography variant="caption" color="text.secondary">{preview.file_name}</Typography>
         </Box>
-        <Stack direction="row" spacing=.8 sx={{flexWrap:'wrap'}}>
+        <Stack direction="row" spacing={.8} sx={{flexWrap:'wrap'}}>
           {preview.preview?.confidence!=null&&
             <Chip size="small" variant="outlined" label={`${Math.round(Number(preview.preview.confidence)*100)}% confidence`}/>}
           {preview.preview?.tax_amount!=null&&
