@@ -55,4 +55,9 @@ def find_match(db: Session, *, account_id: int, txn_at: datetime, amount: Decima
         c = normalize_text(candidate.description_raw or candidate.merchant)
         if normalized and c and (normalized in c or c in normalized):
             return candidate, "possible", 0.82
+    if candidates:
+        # Same account/amount/direction/date-window exists, but there is not
+        # enough evidence to choose one safely. Force review instead of
+        # inserting another transaction and double-counting the statement row.
+        return candidates[0], "ambiguous_amount_date", 0.60
     return None, "new", 0.0
