@@ -563,7 +563,7 @@ export default function Overview(){
 
   const cards={
     spending:<MonthlySpendingCard s={s} mode={resolvedMode}/>,
-    planning:familyScope==='self'&&!familyUserId?<PlanningCard mode={resolvedMode} refreshKey={String(s.total)+':'+String(s.available)+':'+String(s.spent)}/>:null,
+    planning:familyScope==='self'&&!familyUserId?<PlanningCard mode={resolvedMode} refreshKey={String(s.total)+':'+String(s.available)+':'+String(s.spent)} onChanged={load}/>:null,
     accounting:<AccountingControlCard mode={resolvedMode}/>,
     flow:<CashFlowCard s={s} mode={resolvedMode}/>,
     category:<CategoryCard s={s} mode={resolvedMode}/>,
