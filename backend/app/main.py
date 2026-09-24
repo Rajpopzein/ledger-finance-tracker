@@ -1118,6 +1118,8 @@ def commit(token:str, request:Request, db:Session=Depends(get_db)):
                 matched+=1
             if not any(s.external_hash == data["file_hash"] for s in tx.sources):
                 tx.sources.append(TransactionSource(source_type=data["file_name"].split(".")[-1].lower(),source_name=data["file_name"],external_hash=data["file_hash"]))
+            if not tx.bank_ref and row.get("bank_ref"):
+                tx.bank_ref = row["bank_ref"]
             continue
         if row["state"]=="review": review+=1; continue
         fp=fingerprint(data["account_id"],row["txn_at"],amount,row["direction"],row["description"])
