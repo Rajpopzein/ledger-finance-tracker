@@ -66,7 +66,7 @@ class ManualTransactionCreate(BaseModel):
 
 class BillExpenseCreate(BaseModel):
     amount: Decimal = Field(gt=0)
-    payment_method: str = Field(pattern="^(cash|upi|credit_card)$")
+    payment_method: str = Field(pattern="^(cash|upi|bank|credit_card)$")
     account_id: int | None = None
     credit_card_id: int | None = None
     category: str = Field(min_length=1, max_length=80)
