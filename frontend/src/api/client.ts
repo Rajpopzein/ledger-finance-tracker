@@ -240,7 +240,7 @@ export const api={
  commitments:()=>req<any>('/commitments'),
  createCommitment:(body:any)=>req<any>('/commitments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateCommitment:(id:number,body:any)=>req<any>(`/commitments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- completeCommitment:(id:number)=>req<any>(`/commitments/${id}/complete`,{method:'POST'}),
+ completeCommitment:(id:number,body?:{payment_method:'cash'|'upi';account_id?:number|null;paid_at:string})=>req<any>(`/commitments/${id}/complete`,{method:'POST',headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined}),
  deleteCommitment:(id:number)=>req<any>(`/commitments/${id}`,{method:'DELETE'}),
  dismissPrediction:(id:string)=>req<any>(`/predictions/${encodeURIComponent(id)}`,{method:'DELETE'}),
  planningSummary:(months=1)=>req<any>(`/planning-summary?months=${months}`),
