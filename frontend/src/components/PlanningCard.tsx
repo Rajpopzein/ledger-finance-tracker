@@ -55,6 +55,7 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
     notes:'',
   })
   const [busy,setBusy]=useState('')
+  const [planningMonths,setPlanningMonths]=useState(1)
 
   const categoryNames=useMemo(()=>{
     const names=categories.map((item:any)=>item.name)
@@ -65,7 +66,7 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
     setLoading(true)
     setError('')
     try{
-      setData(await api.planningSummary())
+      setData(await api.planningSummary(planningMonths))
     }catch(e:any){
       setData(null)
       setError(e.message||'Could not load planning data.')
@@ -74,7 +75,7 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
     }
   }
 
-  useEffect(()=>{load()},[refreshKey])
+  useEffect(()=>{load()},[refreshKey,planningMonths])
 
   async function saveBudget(){
     if(!budgetForm.category||!Number(budgetForm.monthly_limit))return
@@ -168,6 +169,20 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
     }
   }
 
+  async function dismissPrediction(id:string){
+    if(!window.confirm('Remove this predicted recurring debit from planning? It will stay hidden from future predictions.'))return
+    setBusy('prediction-delete:'+id);setError('');setNotice('')
+    try{
+      await api.dismissPrediction(id)
+      setNotice('Predicted recurring debit removed from planning.')
+      await load()
+    }catch(e:any){
+      setError(e.message||'Could not remove prediction.')
+    }finally{
+      setBusy('')
+    }
+  }
+
   if(loading)return <Paper sx={{...clay,p:{xs:1.4,sm:2}}}>
     <Typography variant="h2">Planning</Typography>
     <Typography color="text.secondary" sx={{mt:.5}}>Calculating budgets and upcoming commitments…</Typography>
@@ -177,10 +192,20 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
     <Stack spacing={1.5}>
       <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'stretch',sm:'center'}} spacing={1.2}>
         <Box>
-          <Typography variant="overline" color="text.secondary">PLANNING · NEXT 30 DAYS</Typography>
+          <Typography variant="overline" color="text.secondary">PLANNING · NEXT {planningMonths} {planningMonths===1?'MONTH':'MONTHS'}</Typography>
           <Typography variant="h2">Plan what stays available</Typography>
         </Box>
-        <Stack direction="row" spacing={1} sx={{flexWrap:'wrap'}}>
+        <Stack direction="row" spacing={1} sx={{flexWrap:'wrap',alignItems:'center'}}>
+          <FormControl size="small" sx={{minWidth:125}}>
+            <InputLabel>Plan ahead</InputLabel>
+            <Select label="Plan ahead" value={planningMonths} onChange={e=>setPlanningMonths(Number(e.target.value))}>
+              <MenuItem value={1}>1 month</MenuItem>
+              <MenuItem value={2}>2 months</MenuItem>
+              <MenuItem value={3}>3 months</MenuItem>
+              <MenuItem value={6}>6 months</MenuItem>
+              <MenuItem value={12}>12 months</MenuItem>
+            </Select>
+          </FormControl>
           <Button variant="outlined" onClick={()=>setBudgetOpen(true)}>Add / update budget</Button>
           <Button variant="contained" onClick={()=>setCommitmentOpen(true)}>Add commitment</Button>
         </Stack>
@@ -203,27 +228,27 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
               </Typography>
             </Stack>
             <Typography variant="body2" color="text.secondary" sx={{mt:.35}}>
-              What remains after commitments due in the next 30 days.
+              What remains after commitments due across the selected planning horizon.
             </Typography>
           </Box>
           <Box sx={{display:'grid',gridTemplateColumns:'1fr auto',columnGap:2,rowGap:.65,mt:2,pt:1.4,borderTop:'1px solid',borderColor:'divider'}}>
             <Typography variant="body2" color="text.secondary">Available balance</Typography>
             <Typography variant="body2" fontWeight={800}>{money(data?.available_balance||0)}</Typography>
-            <Typography variant="body2" color="text.secondary">Upcoming commitments</Typography>
-            <Typography variant="body2" fontWeight={800}>− {money(data?.committed_next_30_days||0)}</Typography>
+            <Typography variant="body2" color="text.secondary">Planned commitments</Typography>
+            <Typography variant="body2" fontWeight={800}>− {money(data?.committed_in_horizon||data?.committed_next_30_days||0)}</Typography>
           </Box>
         </Paper>
 
         <Paper variant="outlined" sx={{p:{xs:1.35,sm:1.6},borderRadius:2.5,height:'100%',minWidth:0}}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{mb:1.15}}>
             <Box>
-              <Typography variant="overline" color="text.secondary">NEXT 30 DAYS</Typography>
+              <Typography variant="overline" color="text.secondary">NEXT {planningMonths} {planningMonths===1?'MONTH':'MONTHS'}</Typography>
               <Typography fontWeight={850}>Upcoming commitments</Typography>
             </Box>
-            <Chip size="small" variant="outlined" label={money(data?.committed_next_30_days||0)}/>
+            <Chip size="small" variant="outlined" label={money(data?.committed_in_horizon||data?.committed_next_30_days||0)}/>
           </Stack>
           <Stack spacing={.75}>
-            {(data?.upcoming||[]).slice(0,7).map((item:any)=><Box key={String(item.id)} sx={{display:'grid',gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(0,1fr) 110px 110px auto'},gap:{xs:.6,sm:1},alignItems:'center',py:.8,borderTop:'1px solid',borderColor:'divider','&:first-of-type':{borderTop:0,pt:0}}}>
+            {(data?.upcoming||[]).slice(0,planningMonths===1?7:24).map((item:any)=><Box key={String(item.id)} sx={{display:'grid',gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(0,1fr) 110px 110px auto'},gap:{xs:.6,sm:1},alignItems:'center',py:.8,borderTop:'1px solid',borderColor:'divider','&:first-of-type':{borderTop:0,pt:0}}}>
               <Box sx={{minWidth:0}}>
                 <Typography variant="body2" fontWeight={800} noWrap>{item.title}</Typography>
                 <Typography variant="caption" color="text.secondary" sx={{display:{xs:'block',sm:'none'}}}>
@@ -241,11 +266,12 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
               </Box>
               <Typography variant="body2" fontWeight={850} textAlign="right">{money(item.amount)}</Typography>
               <Stack direction="row" spacing={.25} justifyContent="flex-end" sx={{gridColumn:{xs:'1 / -1',sm:'auto'}}}>
-                {item.source==='manual'&&<Button size="small" variant="outlined" disabled={busy==='commitment-complete:'+item.id} onClick={()=>completeCommitment(Number(item.id))}>Paid</Button>}
-                {item.source==='manual'&&<Button size="small" color="error" disabled={busy==='commitment-delete:'+item.id} onClick={()=>removeCommitment(Number(item.id))}><DeleteOutlineRoundedIcon fontSize="small"/></Button>}
+                {item.source==='manual'&&!item.future_occurrence&&<Button size="small" variant="outlined" disabled={busy==='commitment-complete:'+item.id} onClick={()=>completeCommitment(Number(item.id))}>Paid</Button>}
+                {item.source==='manual'&&!item.future_occurrence&&<Button size="small" color="error" disabled={busy==='commitment-delete:'+item.id} onClick={()=>removeCommitment(Number(item.id))}><DeleteOutlineRoundedIcon fontSize="small"/></Button>}
+                {(item.source==='recurring'||item.source==='ai_predicted')&&!item.future_occurrence&&<Button size="small" color="error" disabled={busy==='prediction-delete:'+item.id} onClick={()=>dismissPrediction(String(item.id))}><DeleteOutlineRoundedIcon fontSize="small"/></Button>}
               </Stack>
             </Box>)}
-            {!(data?.upcoming||[]).length&&<Typography variant="body2" color="text.secondary">Nothing committed in the next 30 days.</Typography>}
+            {!(data?.upcoming||[]).length&&<Typography variant="body2" color="text.secondary">Nothing committed in the selected planning period.</Typography>}
           </Stack>
         </Paper>
       </Box>

@@ -19,6 +19,7 @@ from .models import (
     Commitment,
     Debt,
     InternalTransfer,
+    PredictionDismissal,
     Transaction,
     TransactionSource,
 )
@@ -560,6 +561,7 @@ def _predicted_recurring_commitments(db: Session, user_id: int, now: datetime, h
         last_row = rows[-1]
         predicted.append({
             "id": f"predicted:{hashlib.sha1(key.encode('utf-8')).hexdigest()[:12]}",
+            "prediction_key": key,
             "title": _prediction_label(last_row),
             "amount": float(typical_amount.quantize(Decimal("0.01"))),
             "next_due_date": next_due.isoformat(),
@@ -586,11 +588,44 @@ def _same_commitment(a: dict, b: dict):
     return False
 
 
-@router.get("/api/planning-summary")
-def planning_summary(request: Request, db: Session = Depends(get_db)):
+@router.delete("/api/predictions/{prediction_id}")
+def dismiss_prediction(
+    prediction_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     user_id = current_user_id(request)
     now = datetime.now(timezone.utc)
-    horizon = now + timedelta(days=30)
+    candidates = _predicted_recurring_commitments(db, user_id, now, now + timedelta(days=370))
+    candidate = next((item for item in candidates if str(item["id"]) == prediction_id), None)
+    if not candidate:
+        raise HTTPException(404, "Prediction not found")
+    existing = db.scalar(
+        select(PredictionDismissal).where(
+            PredictionDismissal.user_id == user_id,
+            PredictionDismissal.prediction_key == candidate["prediction_key"],
+        )
+    )
+    if not existing:
+        db.add(PredictionDismissal(
+            user_id=user_id,
+            prediction_key=candidate["prediction_key"],
+            title=candidate["title"],
+        ))
+        db.commit()
+    return {"ok": True}
+
+
+@router.get("/api/planning-summary")
+def planning_summary(
+    request: Request,
+    db: Session = Depends(get_db),
+    months: int = 1,
+):
+    user_id = current_user_id(request)
+    months = max(1, min(months, 12))
+    now = datetime.now(timezone.utc)
+    horizon = _add_months(now, months)
 
     manual_rows = db.scalars(
         select(Commitment).where(
@@ -632,11 +667,36 @@ def planning_summary(request: Request, db: Session = Depends(get_db)):
                 "overdue": due < now,
             })
 
+    dismissed = set(db.scalars(
+        select(PredictionDismissal.prediction_key).where(
+            PredictionDismissal.user_id == user_id
+        )
+    ).all())
     predicted = _predicted_recurring_commitments(db, user_id, now, horizon)
     for candidate in predicted:
+        if candidate["prediction_key"] in dismissed:
+            continue
         if not any(_same_commitment(candidate, existing) for existing in upcoming):
             upcoming.append(candidate)
 
+    # Expand recurring manual/debt/predicted commitments across the selected planning horizon.
+    expanded = []
+    for item in upcoming:
+        due = datetime.fromisoformat(item["next_due_date"])
+        expanded.append(item)
+        if item.get("recurrence") in ("monthly", "debt") or item.get("source") in ("loan", "credit_card", "recurring", "ai_predicted"):
+            next_due = _add_months(due)
+            occurrence = 2
+            while next_due <= horizon:
+                clone = dict(item)
+                clone["id"] = f'{item["id"]}:m{occurrence}'
+                clone["next_due_date"] = next_due.isoformat()
+                clone["overdue"] = False
+                clone["future_occurrence"] = True
+                expanded.append(clone)
+                next_due = _add_months(next_due)
+                occurrence += 1
+    upcoming = expanded
     upcoming.sort(key=lambda item: item["next_due_date"])
     committed = sum((Decimal(str(item["amount"])) for item in upcoming), Decimal("0"))
     balance = _current_balance(db, user_id)
@@ -651,7 +711,10 @@ def planning_summary(request: Request, db: Session = Depends(get_db)):
     return {
         "balance_configured": bool(balance),
         "available_balance": float(available),
-        "committed_next_30_days": float(committed),
+        "planning_months": months,
+        "planning_until": horizon.isoformat(),
+        "committed_in_horizon": float(committed),
+        "committed_next_30_days": float(committed) if months == 1 else float(sum((Decimal(str(item["amount"])) for item in upcoming if datetime.fromisoformat(item["next_due_date"]) <= now + timedelta(days=30)), Decimal("0"))),
         "safe_to_spend": float(safe),
         "upcoming": upcoming,
         "budget_month": budgets["month"],
