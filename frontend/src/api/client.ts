@@ -1,3 +1,4 @@
+import {invalidateViewCache} from '../viewCache'
 const IS_NATIVE_APP=
   Boolean(import.meta.env.TAURI_ENV_PLATFORM)||
   (typeof window!=='undefined'&&(
@@ -49,6 +50,11 @@ async function req<T>(path:string,init?:RequestInit):Promise<T>{
           ? body
           : r.statusText || `Request failed with status ${r.status}`
     throw new Error(message)
+  }
+
+  const method=(init?.method||'GET').toUpperCase()
+  if(method!=='GET'&&method!=='HEAD'){
+    invalidateViewCache()
   }
 
   return body as T
@@ -159,6 +165,8 @@ export const api={
  balanceHistory:(limit=30)=>req<any>(`/balance/history?limit=${limit}`),
  updateBalance:(body:{bank_balance:number;cash_balance:number;as_of?:string|null})=>req<any>('/balance',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  monthlyCloses:()=>req<any>('/monthly-closes'),
+ prepareMonthlyClose:(monthKey:string)=>req<any>(`/monthly-closes/${monthKey}/prepare`),
+ saveMonthEndBalance:(monthKey:string,body:{bank_balance:number;cash_balance:number})=>req<any>(`/monthly-closes/${monthKey}/balance`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  createMonthlyClose:(monthKey:string)=>req<any>('/monthly-closes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month_key:monthKey})}),
  reconciliation:(status='needs_review')=>req<any>(`/reconciliation?status=${encodeURIComponent(status)}`),
  resolveReconciliation:(id:number,action:'merge'|'keep_both'|'ignore')=>req<any>(`/reconciliation/${id}/resolve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
@@ -174,17 +182,6 @@ export const api={
  familyLinkAction:(linkId:number,action:'accept'|'reject')=>req<any>(`/family-links/${linkId}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
  updateFamilySharing:(linkId:number,sharing:{transactions:boolean;debts:boolean;investments:boolean;ai_insights:boolean;ai_categorization:boolean})=>req<any>(`/family-links/${linkId}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(sharing)}),
  removeFamilyLink:(linkId:number)=>req<any>(`/family-links/${linkId}`,{method:'DELETE'}),
- internalTransfer:(body:{amount:number;from_account_id:number;to_account_id:number;txn_at:string;note?:string|null})=>req<any>('/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- transfers:(limit=20)=>req<any>(`/transfers?limit=${limit}`),
- budgets:()=>req<any>('/budgets'),
- saveBudget:(body:{category:string;monthly_limit:number;is_active?:boolean})=>req<any>('/budgets',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- deleteBudget:(id:number)=>req<any>(`/budgets/${id}`,{method:'DELETE'}),
- commitments:()=>req<any>('/commitments'),
- createCommitment:(body:any)=>req<any>('/commitments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- updateCommitment:(id:number,body:any)=>req<any>(`/commitments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
- completeCommitment:(id:number)=>req<any>(`/commitments/${id}/complete`,{method:'POST'}),
- deleteCommitment:(id:number)=>req<any>(`/commitments/${id}`,{method:'DELETE'}),
- planningSummary:()=>req<any>('/planning-summary'),
  manualTransaction:(body:{
    amount:number
    direction:'credit'|'debit'
@@ -230,6 +227,14 @@ export const api={
    f.append('file',file)
    return req<any>('/imports/upi/commit',{method:'POST',body:f})
  },
+ internalTransfer:(body:{amount:number;from_account_id:number;to_account_id:number;txn_at:string;note?:string|null})=>req<any>('/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ budgets:()=>req<any>('/budgets'),
+ commitments:()=>req<any>('/commitments'),
+ createCommitment:(body:any)=>req<any>('/commitments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ updateCommitment:(id:number,body:any)=>req<any>(`/commitments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ completeCommitment:(id:number)=>req<any>(`/commitments/${id}/complete`,{method:'POST'}),
+ deleteCommitment:(id:number)=>req<any>(`/commitments/${id}`,{method:'DELETE'}),
+ planningSummary:()=>req<any>('/planning-summary'),
  aiSettings:()=>req<any>('/ai/settings'),
  aiCapabilities:()=>req<any>('/ai/capabilities'),
  aiHistory:(limit=40)=>req<any>(`/ai/history?limit=${limit}`),
