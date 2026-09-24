@@ -111,6 +111,7 @@ export const api={
  aiCategorize:(transactionIds:number[],providerUserId?:number)=>req<any>('/transactions/ai-categorize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transaction_ids:transactionIds,provider_user_id:providerUserId||null})}),
  undoCategory:(txId:number)=>req<any>(`/transactions/${txId}/category/undo`,{method:'POST'}),
  updateTransaction:(txId:number,body:any)=>req<any>(`/transactions/${txId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ verifyTransaction:(txId:number)=>req<any>(`/transactions/${txId}/verify`,{method:'POST'}),
  deleteTransaction:(txId:number)=>req<any>(`/transactions/${txId}`,{method:'DELETE'}),
  setTransactionCategory:(txId:number,category:string)=>req<any>(`/transactions/${txId}/category`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({category})}),
  shortcutStatus:()=>req<any>('/shortcuts/status'),
@@ -154,6 +155,8 @@ export const api={
    f.append('file',file)
    return req<any>('/debts/ai-preview',{method:'POST',body:f})
  },
+ balance:()=>req<any>('/balance'),
+ updateBalance:(body:{bank_balance:number;cash_balance:number;as_of?:string|null})=>req<any>('/balance',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  accounts:()=>req<any[]>('/accounts'),
  createAccount:(body:any)=>req<any>('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  categories:()=>req<any[]>('/categories'),
@@ -169,7 +172,7 @@ export const api={
  manualTransaction:(body:{
    amount:number
    direction:'credit'|'debit'
-   payment_method:'cash'|'upi'
+   payment_method:'cash'|'upi'|'credit_card'
    account_id?:number|null
    category:string
    txn_at:string
