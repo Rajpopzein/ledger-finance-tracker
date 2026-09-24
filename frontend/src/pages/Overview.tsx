@@ -106,9 +106,11 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
 
 function MonthlySpendingCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
   const m=s.monthly_spending
-  const comparison=m.previous_month_total>0
-    ? `${money(Math.abs(m.change_amount))} ${m.change_amount>0?'more':'less'} than last month`
-    : 'No previous-month spending to compare yet'
+  const comparison=m.previous_month_total<=0
+    ? 'No previous-month spending to compare yet'
+    : m.change_amount===0
+      ? 'Same spending as last month'
+      : `${money(Math.abs(m.change_amount))} ${m.change_amount>0?'more':'less'} than last month`
   return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2}}}>
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={1.2} sx={{mb:1.7}}>
       <Box>
