@@ -106,6 +106,12 @@ class CommitmentUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
     is_active: bool | None = None
 
+class CommitmentPaymentCreate(BaseModel):
+    payment_method: str = Field(pattern="^(cash|upi)$")
+    account_id: int | None = None
+    paid_at: datetime
+
+
 class AISettingsIn(BaseModel):
     provider: str | None = None
     base_url: str | None = None
