@@ -47,6 +47,17 @@ export type Summary={
   verified:number
   total:number
   needs_review:number
+  monthly_spending:{
+    label:string
+    total:number
+    liquid:number
+    credit_card:number
+    top_category?:string|null
+    top_category_amount:number
+    previous_month_total:number
+    change_amount:number
+    change_percent?:number|null
+  }
   categories:{name:string;amount:number}[]
   cashflow:{label:string;opening_balance:number;new_income:number;income:number;spent:number}[]
   family_spending:{id:number;handle:string;name:string;amount:number}[]
