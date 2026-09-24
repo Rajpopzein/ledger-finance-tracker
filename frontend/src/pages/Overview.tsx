@@ -104,6 +104,63 @@ function CashFlowCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
   </Paper>
 }
 
+function MonthlySpendingCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
+  const m=s.monthly_spending
+  const comparison=m.previous_month_total<=0
+    ? 'No previous-month spending to compare yet'
+    : m.change_amount===0
+      ? 'Same spending as last month'
+      : `${money(Math.abs(m.change_amount))} ${m.change_amount>0?'more':'less'} than last month`
+  return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2}}}>
+    <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={1.2} sx={{mb:1.7}}>
+      <Box>
+        <Typography variant="overline" color="text.secondary">{m.label.toUpperCase()}</Typography>
+        <Typography variant="h2">Monthly spending summary</Typography>
+      </Box>
+      <Box sx={{textAlign:{xs:'left',sm:'right'}}}>
+        <Typography variant="caption" color="text.secondary">TOTAL SPENT</Typography>
+        <Typography sx={{fontSize:'clamp(1.45rem,3vw,2.15rem)',fontWeight:850,letterSpacing:'-.03em'}}>{money(m.total)}</Typography>
+      </Box>
+    </Stack>
+
+    <Box sx={{
+      display:'grid',
+      gridTemplateColumns:{xs:'1fr 1fr',md:'repeat(4,minmax(0,1fr))'},
+      gap:1,
+    }}>
+      <Box sx={{p:1.25,borderRadius:2,bgcolor:'action.hover'}}>
+        <Typography variant="caption" color="text.secondary">BANK / CASH</Typography>
+        <Typography fontWeight={800} sx={{mt:.25}}>{money(m.liquid)}</Typography>
+        <Typography variant="caption" color="text.secondary">Reduced available balance</Typography>
+      </Box>
+      <Box sx={{p:1.25,borderRadius:2,bgcolor:'action.hover'}}>
+        <Typography variant="caption" color="text.secondary">CREDIT CARD</Typography>
+        <Typography fontWeight={800} sx={{mt:.25}}>{money(m.credit_card)}</Typography>
+        <Typography variant="caption" color="text.secondary">Does not reduce cash yet</Typography>
+      </Box>
+      <Box sx={{p:1.25,borderRadius:2,bgcolor:'action.hover'}}>
+        <Typography variant="caption" color="text.secondary">TOP CATEGORY</Typography>
+        <Typography fontWeight={800} sx={{mt:.25}}>{m.top_category||'—'}</Typography>
+        <Typography variant="caption" color="text.secondary">{m.top_category?money(m.top_category_amount):'No spending yet'}</Typography>
+      </Box>
+      <Box sx={{p:1.25,borderRadius:2,bgcolor:'action.hover'}}>
+        <Typography variant="caption" color="text.secondary">VS LAST MONTH</Typography>
+        <Typography fontWeight={800} sx={{mt:.25}}>
+          {m.previous_month_total>0&&m.change_percent!=null
+            ? `${m.change_amount>0?'+':''}${m.change_percent.toFixed(1)}%`
+            : '—'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">{comparison}</Typography>
+      </Box>
+    </Box>
+
+    {s.balance_configured&&<Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={.6} sx={{mt:1.5}}>
+      <Typography variant="body2" color="text.secondary">Available now after liquid transactions</Typography>
+      <Typography variant="body2" fontWeight={800}>{money(s.available)}</Typography>
+    </Stack>}
+  </Paper>
+}
+
 function CategoryCard({s,mode}:{s:Summary;mode:'light'|'dark'}){
   return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2},height:'100%'}}>
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:{xs:1.25,sm:2}}}>
@@ -391,6 +448,7 @@ export default function Overview(){
   </Box>
 
   const cards={
+    spending:<MonthlySpendingCard s={s} mode={resolvedMode}/>,
     flow:<CashFlowCard s={s} mode={resolvedMode}/>,
     category:<CategoryCard s={s} mode={resolvedMode}/>,
     family:<FamilyCard s={s} periodLabel={period.label} mode={resolvedMode}/>,
@@ -400,6 +458,7 @@ export default function Overview(){
   const balanced=<>
     {hero}
     {metrics}
+    {cards.spending}
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.15fr .85fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{cards.family}</Box>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:{xs:1.15,sm:2}}}>{cards.recent}{cards.category}</Box>
   </>
@@ -416,6 +475,7 @@ export default function Overview(){
 
   const insights=<>
     {metrics}
+    {cards.spending}
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.4fr .6fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{hero}</Box>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 1fr 1fr'},gap:{xs:1.15,sm:2}}}>
       {cards.category}

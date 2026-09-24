@@ -7,8 +7,9 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from backend.app.db import Base
-from backend.app.main import _create_manual_transaction, _current_available_balance, app
+from backend.app.main import _create_manual_transaction, _current_available_balance, _spending_breakdown, app
 from backend.app.models import Account, AvailableBalance, Transaction, User
+from backend.app.services.dedupe import find_match
 
 
 def _db():
@@ -228,3 +229,206 @@ def test_balance_and_verify_routes_are_available():
     assert balance_get is not None
     assert balance_put is not None
     assert "POST" in verify.methods
+
+
+def test_spending_breakdown_separates_liquid_and_credit_card():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("800.00"),
+        direction="debit",
+        payment_method="upi",
+        category_name="Groceries",
+        txn_at=datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc),
+        merchant="Market",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("200.00"),
+        direction="debit",
+        payment_method="cash",
+        category_name="Groceries",
+        txn_at=datetime(2026, 9, 24, 9, 30, tzinfo=timezone.utc),
+        merchant="Market",
+        note=None,
+        account_id=None,
+        db=db,
+    )
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("500.00"),
+        direction="debit",
+        payment_method="credit_card",
+        category_name="Shopping",
+        txn_at=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
+        merchant="Store",
+        note=None,
+        account_id=None,
+        db=db,
+    )
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("1000.00"),
+        direction="debit",
+        payment_method="upi",
+        category_name="Investments",
+        txn_at=datetime(2026, 9, 24, 10, 30, tzinfo=timezone.utc),
+        merchant="Broker",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+
+    rows = db.scalars(select(Transaction).where(Transaction.user_id == user.id)).all()
+    result = _spending_breakdown(rows)
+
+    assert result["total"] == Decimal("1500.00")
+    assert result["liquid"] == Decimal("1000.00")
+    assert result["credit_card"] == Decimal("500.00")
+    assert result["top_category"] == "Groceries"
+    assert result["top_category_amount"] == Decimal("1000.00")
+
+
+def test_manual_income_increases_available_balance():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Salary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+    db.add(AvailableBalance(
+        user_id=user.id,
+        bank_balance=Decimal("1000.00"),
+        cash_balance=Decimal("100.00"),
+        as_of=datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc),
+    ))
+    db.commit()
+
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("250.00"),
+        direction="credit",
+        payment_method="upi",
+        category_name="Payroll",
+        txn_at=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
+        merchant="Employer",
+        note="Salary adjustment",
+        account_id=bank.id,
+        db=db,
+    )
+
+    state = _current_available_balance(db, user.id)
+    assert state is not None
+    assert state["bank_balance"] == Decimal("1250.00")
+    assert state["cash_balance"] == Decimal("100.00")
+    assert state["total"] == Decimal("1350.00")
+
+
+def test_statement_row_reconciles_unique_manual_transaction_even_when_description_differs():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+
+    manual = _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("499.00"),
+        direction="debit",
+        payment_method="upi",
+        category_name="Shopping",
+        txn_at=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
+        merchant="Amazon",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+
+    match, method, score = find_match(
+        db,
+        account_id=bank.id,
+        txn_at=datetime(2026, 9, 24, 17, 0, tzinfo=timezone.utc),
+        amount=Decimal("499.00"),
+        direction="debit",
+        description="UPI PURCHASE REF 123456789",
+        bank_ref="123456789",
+    )
+
+    assert match is not None
+    assert match.id == manual["id"]
+    assert method == "manual_amount_date"
+    assert score == 0.94
+
+
+def test_ambiguous_same_amount_manual_entries_require_review_instead_of_new_insert():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+
+    for hour, merchant in ((10, "Shop A"), (12, "Shop B")):
+        _create_manual_transaction(
+            user_id=user.id,
+            amount=Decimal("100.00"),
+            direction="debit",
+            payment_method="upi",
+            category_name="Shopping",
+            txn_at=datetime(2026, 9, 24, hour, 0, tzinfo=timezone.utc),
+            merchant=merchant,
+            note=None,
+            account_id=bank.id,
+            db=db,
+        )
+
+    match, method, score = find_match(
+        db,
+        account_id=bank.id,
+        txn_at=datetime(2026, 9, 24, 18, 0, tzinfo=timezone.utc),
+        amount=Decimal("100.00"),
+        direction="debit",
+        description="BANK DEBIT 100",
+    )
+
+    assert match is not None
+    assert method == "ambiguous_amount_date"
+    assert score == 0.60

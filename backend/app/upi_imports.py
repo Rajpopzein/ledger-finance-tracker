@@ -135,7 +135,7 @@ def _classify(db: Session, user_id: int, row):
             upi_ref=upi_ref,
             bank_ref=upi_ref,
         )
-        if match and method in ("upi_ref", "bank_ref", "fingerprint"):
+        if match and method in ("upi_ref", "bank_ref", "fingerprint", "manual_amount_date"):
             return match, method, score, "existing"
         if match and (review_candidate is None or score > review_candidate[2]):
             review_candidate = (match, method, score)

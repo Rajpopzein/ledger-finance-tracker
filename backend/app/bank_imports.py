@@ -54,7 +54,7 @@ def _classify(db: Session, account_id: int, row):
         bank_ref=row.get("bank_ref"),
     )
 
-    if match and method in ("upi_ref", "bank_ref", "fingerprint"):
+    if match and method in ("upi_ref", "bank_ref", "fingerprint", "manual_amount_date"):
         state = "existing" if match.verification_status == "verified" else "matched"
     elif match:
         state = "review"
@@ -152,6 +152,8 @@ async def commit_bank_statement(
                         external_hash=file_hash,
                     )
                 )
+            if not match.bank_ref and row.get("bank_ref"):
+                match.bank_ref = row["bank_ref"]
             continue
 
         if state == "review":
