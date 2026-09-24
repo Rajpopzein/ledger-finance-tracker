@@ -36,7 +36,7 @@ import QuickCash from '../components/QuickCash'
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
 const verificationLabel=(status:string)=>status==='verified'||status==='manual'?'Verified':'Needs review'
-const DESKTOP_TRANSACTION_COLUMNS='360px 190px 140px 160px 40px'
+const DESKTOP_TRANSACTION_COLUMNS='minmax(280px,2fr) minmax(160px,1fr) minmax(130px,.8fr) minmax(140px,1fr) 40px'
 const DESKTOP_TRANSACTION_MIN_WIDTH=930
 const localDateTime=(value:string)=>{
   const d=new Date(value)
