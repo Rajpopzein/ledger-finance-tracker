@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useSearchParams} from 'react-router-dom'
 import {
   Box,
   Stack,
@@ -14,7 +14,10 @@ import SectionNav from '../components/SectionNav'
 type ImportMode='bank'|'upi'|'reconciliation'|'debt'|'investment'
 
 export default function ImportReview(){
-  const [mode,setMode]=useState<ImportMode>('bank')
+  const [searchParams,setSearchParams]=useSearchParams()
+  const rawTab=searchParams.get('tab')
+  const mode:ImportMode=rawTab==='upi'||rawTab==='reconciliation'||rawTab==='debt'||rawTab==='investment'?rawTab:'bank'
+  const setMode=(value:ImportMode)=>setSearchParams(value==='bank'?{}:{tab:value})
 
   return <Stack spacing={{xs:1.4,sm:2}}>
     <Box>

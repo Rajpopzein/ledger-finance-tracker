@@ -5,7 +5,7 @@ from starlette.requests import Request
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from backend.app.accounting_core import create_monthly_close, resolve_reconciliation
+from backend.app.accounting_core import create_monthly_close, prepare_monthly_close, resolve_reconciliation, save_month_end_balance
 from backend.app.db import Base
 from backend.app.finance_features import add_debt_payment
 from backend.app.main import _create_manual_transaction, _current_available_balance, _spending_breakdown
@@ -22,7 +22,7 @@ from backend.app.models import (
     TransactionSource,
     User,
 )
-from backend.app.schemas import DebtPaymentCreate, MonthlyCloseCreate, ReconciliationResolve
+from backend.app.schemas import DebtPaymentCreate, MonthEndBalanceUpdate, MonthlyCloseCreate, ReconciliationResolve
 
 
 def _db():
@@ -286,6 +286,15 @@ def test_monthly_close_is_immutable_and_keeps_card_spending_separate():
     )
 
     request = _request(user.id)
+    save_month_end_balance(
+        "2026-08",
+        MonthEndBalanceUpdate(
+            bank_balance=Decimal("1400.00"),
+            cash_balance=Decimal("0.00"),
+        ),
+        request,
+        db,
+    )
     first = create_monthly_close(
         MonthlyCloseCreate(month_key="2026-08"),
         request,
@@ -305,3 +314,112 @@ def test_monthly_close_is_immutable_and_keeps_card_spending_separate():
     assert second["already_closed"] is True
     closes = db.scalars(select(MonthlyClose).where(MonthlyClose.user_id == user.id)).all()
     assert len(closes) == 1
+
+
+
+def test_month_end_balance_snapshot_does_not_overwrite_current_balance():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    current_as_of = datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc)
+    db.add(
+        AvailableBalance(
+            user_id=user.id,
+            bank_balance=Decimal("9000.00"),
+            cash_balance=Decimal("500.00"),
+            as_of=current_as_of,
+        )
+    )
+    db.commit()
+
+    result = save_month_end_balance(
+        "2026-08",
+        MonthEndBalanceUpdate(
+            bank_balance=Decimal("7000.00"),
+            cash_balance=Decimal("300.00"),
+        ),
+        _request(user.id),
+        db,
+    )
+
+    current = db.scalar(
+        select(AvailableBalance).where(AvailableBalance.user_id == user.id)
+    )
+    month_end = db.scalar(
+        select(BalanceSnapshot).where(
+            BalanceSnapshot.user_id == user.id,
+            BalanceSnapshot.source == "month_end",
+        )
+    )
+
+    assert result["total"] == 7300.0
+    assert current is not None
+    assert current.bank_balance == Decimal("9000.00")
+    assert current.cash_balance == Decimal("500.00")
+    assert current.as_of.replace(tzinfo=timezone.utc) == current_as_of
+    assert month_end is not None
+    assert month_end.bank_balance == Decimal("7000.00")
+    assert month_end.cash_balance == Decimal("300.00")
+
+
+def test_prepare_monthly_close_guides_review_and_balance_confirmation():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+    db.add(
+        BalanceSnapshot(
+            user_id=user.id,
+            bank_balance=Decimal("1000.00"),
+            cash_balance=Decimal("100.00"),
+            as_of=datetime(2026, 7, 31, 18, 0, tzinfo=timezone.utc),
+            source="manual",
+        )
+    )
+    tx = Transaction(
+        user_id=user.id,
+        account_id=bank.id,
+        txn_at=datetime(2026, 8, 10, 9, 0, tzinfo=timezone.utc),
+        amount=Decimal("100.00"),
+        direction="debit",
+        txn_type="expense",
+        merchant="Needs review",
+        description_raw="Needs review",
+        fingerprint="f" * 64,
+        verification_status="pending",
+    )
+    db.add(tx)
+    db.commit()
+
+    before = prepare_monthly_close("2026-08", _request(user.id), db)
+    assert before["already_closed"] is False
+    assert before["month_end_balance_confirmed"] is False
+    assert before["review_transactions"] == 1
+    assert before["month_end_balance"]["total"] == 1000.0
+
+    save_month_end_balance(
+        "2026-08",
+        MonthEndBalanceUpdate(
+            bank_balance=Decimal("850.00"),
+            cash_balance=Decimal("50.00"),
+        ),
+        _request(user.id),
+        db,
+    )
+    after = prepare_monthly_close("2026-08", _request(user.id), db)
+
+    assert after["month_end_balance_confirmed"] is True
+    assert after["month_end_balance"]["bank_balance"] == 850.0
+    assert after["month_end_balance"]["cash_balance"] == 50.0
+    assert after["month_end_balance"]["total"] == 900.0
+    assert after["summary"]["closing_balance"] == 900.0

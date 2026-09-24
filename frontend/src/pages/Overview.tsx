@@ -23,11 +23,13 @@ import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded'
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
 import TrendingDownRoundedIcon from '@mui/icons-material/TrendingDownRounded'
 import QuickCash from '../components/QuickCash'
+import MonthEndCloseDialog from '../components/MonthEndCloseDialog'
 import {api} from '../api/client'
 import type {Summary,Tx} from '../types'
 import {usePeriod} from '../period'
 import {useFamily} from '../family'
 import {claySx,useUI} from '../ui'
+import {getViewCache,setViewCache} from '../viewCache'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
@@ -230,11 +232,12 @@ function RecentCard({tx,mode,onAll}:{tx:Tx[];mode:'light'|'dark';onAll:()=>void}
 }
 
 function AccountingControlCard({mode}:{mode:'light'|'dark'}){
-  const [history,setHistory]=useState<any[]>([])
-  const [closes,setCloses]=useState<any[]>([])
-  const [busy,setBusy]=useState(false)
-  const [confirmOpen,setConfirmOpen]=useState(false)
-  const [result,setResult]=useState<{type:'success'|'error';title:string;message:string}|null>(null)
+  const accountingCacheKey='overview:accounting'
+  const cachedAccounting=getViewCache<{history:any[];closes:any[]}>(accountingCacheKey)
+  const [history,setHistory]=useState<any[]>(()=>cachedAccounting?.history||[])
+  const [closes,setCloses]=useState<any[]>(()=>cachedAccounting?.closes||[])
+  const [closeOpen,setCloseOpen]=useState(false)
+  const [loadError,setLoadError]=useState('')
 
   const now=new Date()
   const previousMonth=new Date(now.getFullYear(),now.getMonth()-1,1)
@@ -242,49 +245,36 @@ function AccountingControlCard({mode}:{mode:'light'|'dark'}){
   const targetLabel=previousMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'})
   const alreadyClosed=closes.some((row:any)=>row.month_key===targetKey)
 
-  async function loadAccounting(){
+  async function loadAccounting(force=false){
+    if(!force){
+      const cached=getViewCache<{history:any[];closes:any[]}>(accountingCacheKey)
+      if(cached){
+        setHistory(cached.history)
+        setCloses(cached.closes)
+        setLoadError('')
+        return
+      }
+    }
+
+    setLoadError('')
     try{
       const [historyResult,closeResult]=await Promise.all([
         api.balanceHistory(5),
         api.monthlyCloses(),
       ])
-      setHistory(historyResult?.items||[])
-      setCloses(closeResult?.items||[])
+      const next={
+        history:historyResult?.items||[],
+        closes:closeResult?.items||[],
+      }
+      setHistory(next.history)
+      setCloses(next.closes)
+      setViewCache(accountingCacheKey,next)
     }catch(e:any){
-      setResult({
-        type:'error',
-        title:'Could not load accounting history',
-        message:e.message||'Please try again.',
-      })
+      setLoadError(e.message||'Could not load accounting history.')
     }
   }
 
   useEffect(()=>{loadAccounting()},[])
-
-  async function closePreviousMonth(){
-    setBusy(true)
-    try{
-      const closeResult=await api.createMonthlyClose(targetKey)
-      setConfirmOpen(false)
-      setResult({
-        type:'success',
-        title:closeResult?.already_closed?'Month already closed':'Month closed',
-        message:closeResult?.already_closed
-          ?`${targetLabel} was already closed.`
-          :`${targetLabel} has been closed successfully. The month-end snapshot is now locked for reporting and reconciliation.`,
-      })
-      await loadAccounting()
-    }catch(e:any){
-      setConfirmOpen(false)
-      setResult({
-        type:'error',
-        title:'Could not close month',
-        message:e.message||'Please try again.',
-      })
-    }finally{
-      setBusy(false)
-    }
-  }
 
   const latestClose=closes[0]
 
@@ -294,23 +284,27 @@ function AccountingControlCard({mode}:{mode:'light'|'dark'}){
         <Typography variant="overline" color="text.secondary">ACCOUNTING CONTROL</Typography>
         <Typography variant="h2">Month close & balance history</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mt:.45}}>
-          Balance adjustments remain auditable, and completed months can be frozen as reporting snapshots.
+          Use the guided close to review records, enter the actual month-end bank and cash balances, preview the month, and then lock the reporting snapshot.
         </Typography>
 
         <Stack spacing={.75} sx={{mt:1.5}}>
           {history.slice(0,3).map((row:any)=><Stack key={row.id} direction="row" justifyContent="space-between" spacing={1}>
-            <Typography variant="body2" color="text.secondary">
-              {new Date(row.as_of).toLocaleString('en-IN')}
-            </Typography>
+            <Box sx={{minWidth:0}}>
+              <Typography variant="body2" color="text.secondary">
+                {new Date(row.as_of).toLocaleString('en-IN')}
+              </Typography>
+              {row.source==='month_end'&&<Typography variant="caption" color="primary.main">Month-end balance</Typography>}
+            </Box>
             <Typography variant="body2" fontWeight={800}>{money(row.total)}</Typography>
           </Stack>)}
-          {!history.length&&<Typography variant="body2" color="text.secondary">
-            No balance adjustments recorded yet. Your next balance update will start the history.
+          {!history.length&&!loadError&&<Typography variant="body2" color="text.secondary">
+            No balance history yet. The month-end guide will create the historical closing balance for you.
           </Typography>}
+          {loadError&&<Typography variant="caption" color="error.main">{loadError}</Typography>}
         </Stack>
       </Box>
 
-      <Box sx={{minWidth:{md:280}}}>
+      <Box sx={{minWidth:{md:300}}}>
         {latestClose?<Paper variant="outlined" sx={{p:1.25,borderRadius:2,mb:1}}>
           <Typography variant="caption" color="text.secondary">LATEST CLOSED MONTH</Typography>
           <Typography fontWeight={850} sx={{mt:.25}}>{latestClose.month_key} · {money(latestClose.closing_balance)}</Typography>
@@ -318,73 +312,33 @@ function AccountingControlCard({mode}:{mode:'light'|'dark'}){
             Savings {money(latestClose.savings)}
           </Typography>
         </Paper>:<Paper variant="outlined" sx={{p:1.25,borderRadius:2,mb:1}}>
-          <Typography variant="caption" color="text.secondary">LATEST CLOSED MONTH</Typography>
-          <Typography variant="body2" fontWeight={700} sx={{mt:.25}}>No month closed yet</Typography>
-          <Typography variant="caption" color="text.secondary">Close the previous month when your records are ready.</Typography>
+          <Typography variant="caption" color="text.secondary">MONTH-END GUIDE</Typography>
+          <Typography variant="body2" fontWeight={800} sx={{mt:.25}}>Nothing closed yet</Typography>
+          <Typography variant="caption" color="text.secondary">
+            The guide will tell you exactly what to review and where to enter closing balances.
+          </Typography>
         </Paper>}
 
         <Button
           fullWidth
           variant={alreadyClosed?'outlined':'contained'}
-          disabled={busy||alreadyClosed}
-          onClick={()=>setConfirmOpen(true)}
+          onClick={()=>setCloseOpen(true)}
         >
-          {alreadyClosed?`${targetLabel} closed`:`Close ${targetLabel}`}
+          {alreadyClosed?`View ${targetLabel} close`:`Prepare & close ${targetLabel}`}
         </Button>
+        {!alreadyClosed&&<Typography variant="caption" color="text.secondary" sx={{display:'block',mt:.75}}>
+          Review records → enter month-end balance → preview → close
+        </Typography>}
       </Box>
     </Stack>
 
-    <Dialog
-      open={confirmOpen}
-      onClose={busy?undefined:()=>setConfirmOpen(false)}
-      fullWidth
-      maxWidth="xs"
-    >
-      <DialogTitle>Close {targetLabel}?</DialogTitle>
-      <DialogContent>
-        <Stack spacing={1.25} sx={{pt:.4}}>
-          <Typography variant="body2">
-            This creates an immutable month-end snapshot for reconciliation and reporting.
-          </Typography>
-          <Paper variant="outlined" sx={{p:1.25,borderRadius:2}}>
-            <Typography variant="caption" color="text.secondary">MONTH TO CLOSE</Typography>
-            <Typography fontWeight={850} sx={{mt:.2}}>{targetLabel}</Typography>
-          </Paper>
-          <Typography variant="caption" color="text.secondary">
-            After closing, the saved month snapshot remains unchanged even if you later adjust current balances.
-          </Typography>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{p:2}}>
-        <Button onClick={()=>setConfirmOpen(false)} disabled={busy}>Cancel</Button>
-        <Button variant="contained" onClick={closePreviousMonth} disabled={busy}>
-          {busy?'Closing…':'Close month'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-
-    <Dialog
-      open={Boolean(result)}
-      onClose={()=>setResult(null)}
-      fullWidth
-      maxWidth="xs"
-    >
-      <DialogTitle>{result?.title}</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{pt:.4}}>
-          {result?.message}
-        </Typography>
-      </DialogContent>
-      <DialogActions sx={{p:2}}>
-        <Button
-          variant="contained"
-          color={result?.type==='error'?'error':'primary'}
-          onClick={()=>setResult(null)}
-        >
-          Done
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <MonthEndCloseDialog
+      open={closeOpen}
+      monthKey={targetKey}
+      monthLabel={targetLabel}
+      onClose={()=>setCloseOpen(false)}
+      onClosed={loadAccounting}
+    />
   </Paper>
 }
 
@@ -468,14 +422,33 @@ export default function Overview(){
   const {period,setPeriodKey}=usePeriod()
   const {familyScope,familyUserId,scopeLabel}=useFamily()
   const {dashboardTemplate,resolvedMode}=useUI()
-  const [s,setS]=useState<Summary|null>(null)
-  const [tx,setTx]=useState<Tx[]>([])
+  const overviewCacheKey=[
+    'overview',
+    period.from||'',
+    period.to||'',
+    familyScope,
+    familyUserId==null?'':String(familyUserId),
+  ].join(':')
+  const cachedOverview=getViewCache<{summary:Summary;tx:Tx[]}>(overviewCacheKey)
+  const [s,setS]=useState<Summary|null>(()=>cachedOverview?.summary||null)
+  const [tx,setTx]=useState<Tx[]>(()=>cachedOverview?.tx||[])
   const [cash,setCash]=useState(false)
   const [balanceOpen,setBalanceOpen]=useState(false)
-  const [loading,setLoading]=useState(true)
+  const [loading,setLoading]=useState(()=>!cachedOverview)
   const [error,setError]=useState('')
 
-  async function load(){
+  async function load(force=false){
+    if(!force){
+      const cached=getViewCache<{summary:Summary;tx:Tx[]}>(overviewCacheKey)
+      if(cached){
+        setS(cached.summary)
+        setTx(cached.tx)
+        setLoading(false)
+        setError('')
+        return
+      }
+    }
+
     setLoading(true)
     setError('')
     try{
@@ -490,8 +463,10 @@ export default function Overview(){
           pageSize:5,
         })
       ])
-      setS(summary)
-      setTx(transactions.items||[])
+      const next={summary,tx:transactions.items||[]}
+      setS(next.summary)
+      setTx(next.tx)
+      setViewCache(overviewCacheKey,next)
     }catch(e:any){
       setError(e.message||'Could not load dashboard data.')
       setS(null)
@@ -501,7 +476,17 @@ export default function Overview(){
     }
   }
 
-  useEffect(()=>{load()},[period.from,period.to,familyScope,familyUserId])
+  useEffect(()=>{
+    const cached=getViewCache<{summary:Summary;tx:Tx[]}>(overviewCacheKey)
+    if(cached){
+      setS(cached.summary)
+      setTx(cached.tx)
+      setLoading(false)
+      setError('')
+      return
+    }
+    load()
+  },[overviewCacheKey])
 
   if(loading)return <Box sx={{display:'grid',gap:2}}>
     <Skeleton variant="rounded" height={160} sx={{borderRadius:1.75}}/>
@@ -511,7 +496,7 @@ export default function Overview(){
     </Box>
   </Box>
 
-  if(error)return <Alert severity="error" action={<Button onClick={load}>Try again</Button>}>{error}</Alert>
+  if(error)return <Alert severity="error" action={<Button onClick={()=>load(true)}>Try again</Button>}>{error}</Alert>
   if(!s)return null
 
   const pct=s.total?Math.round(s.verified/s.total*1000)/10:0
@@ -665,7 +650,7 @@ export default function Overview(){
 
     {dashboardTemplate==='focus'?focus:dashboardTemplate==='insights'?insights:balanced}
 
-    <QuickCash open={cash} onClose={()=>setCash(false)} onSaved={load}/>
-    <BalanceDialog open={balanceOpen} onClose={()=>setBalanceOpen(false)} onSaved={load} summary={s}/>
+    <QuickCash open={cash} onClose={()=>setCash(false)} onSaved={()=>load(true)}/>
+    <BalanceDialog open={balanceOpen} onClose={()=>setBalanceOpen(false)} onSaved={()=>load(true)} summary={s}/>
   </Stack>
 }
