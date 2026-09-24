@@ -619,8 +619,8 @@ def dismiss_prediction(
 @router.get("/api/planning-summary")
 def planning_summary(
     request: Request,
-    months: int = 1,
     db: Session = Depends(get_db),
+    months: int = 1,
 ):
     user_id = current_user_id(request)
     months = max(1, min(months, 12))
