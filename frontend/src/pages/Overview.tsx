@@ -29,6 +29,7 @@ import type {Summary,Tx} from '../types'
 import {usePeriod} from '../period'
 import {useFamily} from '../family'
 import {claySx,useUI} from '../ui'
+import {getViewCache,setViewCache} from '../viewCache'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
@@ -231,8 +232,10 @@ function RecentCard({tx,mode,onAll}:{tx:Tx[];mode:'light'|'dark';onAll:()=>void}
 }
 
 function AccountingControlCard({mode}:{mode:'light'|'dark'}){
-  const [history,setHistory]=useState<any[]>([])
-  const [closes,setCloses]=useState<any[]>([])
+  const accountingCacheKey='overview:accounting'
+  const cachedAccounting=getViewCache<{history:any[];closes:any[]}>(accountingCacheKey)
+  const [history,setHistory]=useState<any[]>(()=>cachedAccounting?.history||[])
+  const [closes,setCloses]=useState<any[]>(()=>cachedAccounting?.closes||[])
   const [closeOpen,setCloseOpen]=useState(false)
   const [loadError,setLoadError]=useState('')
 
@@ -242,15 +245,30 @@ function AccountingControlCard({mode}:{mode:'light'|'dark'}){
   const targetLabel=previousMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'})
   const alreadyClosed=closes.some((row:any)=>row.month_key===targetKey)
 
-  async function loadAccounting(){
+  async function loadAccounting(force=false){
+    if(!force){
+      const cached=getViewCache<{history:any[];closes:any[]}>(accountingCacheKey)
+      if(cached){
+        setHistory(cached.history)
+        setCloses(cached.closes)
+        setLoadError('')
+        return
+      }
+    }
+
     setLoadError('')
     try{
       const [historyResult,closeResult]=await Promise.all([
         api.balanceHistory(5),
         api.monthlyCloses(),
       ])
-      setHistory(historyResult?.items||[])
-      setCloses(closeResult?.items||[])
+      const next={
+        history:historyResult?.items||[],
+        closes:closeResult?.items||[],
+      }
+      setHistory(next.history)
+      setCloses(next.closes)
+      setViewCache(accountingCacheKey,next)
     }catch(e:any){
       setLoadError(e.message||'Could not load accounting history.')
     }
@@ -404,14 +422,33 @@ export default function Overview(){
   const {period,setPeriodKey}=usePeriod()
   const {familyScope,familyUserId,scopeLabel}=useFamily()
   const {dashboardTemplate,resolvedMode}=useUI()
-  const [s,setS]=useState<Summary|null>(null)
-  const [tx,setTx]=useState<Tx[]>([])
+  const overviewCacheKey=[
+    'overview',
+    period.from||'',
+    period.to||'',
+    familyScope,
+    familyUserId==null?'':String(familyUserId),
+  ].join(':')
+  const cachedOverview=getViewCache<{summary:Summary;tx:Tx[]}>(overviewCacheKey)
+  const [s,setS]=useState<Summary|null>(()=>cachedOverview?.summary||null)
+  const [tx,setTx]=useState<Tx[]>(()=>cachedOverview?.tx||[])
   const [cash,setCash]=useState(false)
   const [balanceOpen,setBalanceOpen]=useState(false)
-  const [loading,setLoading]=useState(true)
+  const [loading,setLoading]=useState(()=>!cachedOverview)
   const [error,setError]=useState('')
 
-  async function load(){
+  async function load(force=false){
+    if(!force){
+      const cached=getViewCache<{summary:Summary;tx:Tx[]}>(overviewCacheKey)
+      if(cached){
+        setS(cached.summary)
+        setTx(cached.tx)
+        setLoading(false)
+        setError('')
+        return
+      }
+    }
+
     setLoading(true)
     setError('')
     try{
@@ -426,8 +463,10 @@ export default function Overview(){
           pageSize:5,
         })
       ])
-      setS(summary)
-      setTx(transactions.items||[])
+      const next={summary,tx:transactions.items||[]}
+      setS(next.summary)
+      setTx(next.tx)
+      setViewCache(overviewCacheKey,next)
     }catch(e:any){
       setError(e.message||'Could not load dashboard data.')
       setS(null)
@@ -437,7 +476,17 @@ export default function Overview(){
     }
   }
 
-  useEffect(()=>{load()},[period.from,period.to,familyScope,familyUserId])
+  useEffect(()=>{
+    const cached=getViewCache<{summary:Summary;tx:Tx[]}>(overviewCacheKey)
+    if(cached){
+      setS(cached.summary)
+      setTx(cached.tx)
+      setLoading(false)
+      setError('')
+      return
+    }
+    load()
+  },[overviewCacheKey])
 
   if(loading)return <Box sx={{display:'grid',gap:2}}>
     <Skeleton variant="rounded" height={160} sx={{borderRadius:1.75}}/>
@@ -601,7 +650,7 @@ export default function Overview(){
 
     {dashboardTemplate==='focus'?focus:dashboardTemplate==='insights'?insights:balanced}
 
-    <QuickCash open={cash} onClose={()=>setCash(false)} onSaved={load}/>
-    <BalanceDialog open={balanceOpen} onClose={()=>setBalanceOpen(false)} onSaved={load} summary={s}/>
+    <QuickCash open={cash} onClose={()=>setCash(false)} onSaved={()=>load(true)}/>
+    <BalanceDialog open={balanceOpen} onClose={()=>setBalanceOpen(false)} onSaved={()=>load(true)} summary={s}/>
   </Stack>
 }
