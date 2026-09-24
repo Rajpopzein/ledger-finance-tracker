@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, InvestmentHolding
-from .schemas import AccountCreate, CashTransactionCreate, ManualTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
+from .models import Account, AvailableBalance, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, InvestmentHolding
+from .schemas import AccountCreate, AvailableBalanceUpdate, CashTransactionCreate, ManualTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .services.secrets import encrypt
@@ -234,6 +234,89 @@ DEFAULT_CATEGORIES=["Food & Dining","Fuel","Groceries","EMI & Loans","Shopping",
 def _serialize_accounts(rows):
     return [{"id":a.id,"name":a.name,"institution":a.institution,"mask":a.account_mask,"type":a.type} for a in rows]
 
+def _balance_deltas(items):
+    bank_delta=Decimal("0")
+    cash_delta=Decimal("0")
+    for t in items:
+        if t.txn_type=="internal_transfer" or t.txn_type=="credit_card_purchase" or t.payment_method=="credit_card":
+            continue
+        delta=t.amount if t.direction=="credit" else -t.amount
+        is_cash=t.payment_method=="cash" or (t.account is not None and t.account.type=="cash")
+        if is_cash:
+            cash_delta+=delta
+        else:
+            bank_delta+=delta
+    return bank_delta,cash_delta
+
+def _current_available_balance(db:Session,user_id:int):
+    snapshot=db.scalar(select(AvailableBalance).where(AvailableBalance.user_id==user_id))
+    if not snapshot:
+        return None
+    rows=db.scalars(
+        select(Transaction).where(
+            Transaction.user_id==user_id,
+            Transaction.excluded_from_analytics==False,
+            Transaction.txn_at>=snapshot.as_of,
+        )
+    ).all()
+    bank_delta,cash_delta=_balance_deltas(rows)
+    bank=Decimal(snapshot.bank_balance)+bank_delta
+    cash=Decimal(snapshot.cash_balance)+cash_delta
+    return {
+        "configured":True,
+        "bank_balance":bank,
+        "cash_balance":cash,
+        "total":bank+cash,
+        "as_of":snapshot.as_of,
+    }
+
+@app.get("/api/balance")
+def get_available_balance(request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    state=_current_available_balance(db,user_id)
+    if not state:
+        return {
+            "configured":False,
+            "bank_balance":0.0,
+            "cash_balance":0.0,
+            "total":0.0,
+            "as_of":None,
+        }
+    return {
+        "configured":True,
+        "bank_balance":float(state["bank_balance"]),
+        "cash_balance":float(state["cash_balance"]),
+        "total":float(state["total"]),
+        "as_of":state["as_of"].isoformat() if state["as_of"] else None,
+    }
+
+@app.put("/api/balance")
+def set_available_balance(body:AvailableBalanceUpdate, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    snapshot=db.scalar(select(AvailableBalance).where(AvailableBalance.user_id==user_id))
+    as_of=body.as_of or datetime.now(timezone.utc)
+    if snapshot:
+        snapshot.bank_balance=body.bank_balance
+        snapshot.cash_balance=body.cash_balance
+        snapshot.as_of=as_of
+    else:
+        snapshot=AvailableBalance(
+            user_id=user_id,
+            bank_balance=body.bank_balance,
+            cash_balance=body.cash_balance,
+            as_of=as_of,
+        )
+        db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return {
+        "configured":True,
+        "bank_balance":float(snapshot.bank_balance),
+        "cash_balance":float(snapshot.cash_balance),
+        "total":float(snapshot.bank_balance+snapshot.cash_balance),
+        "as_of":snapshot.as_of.isoformat() if snapshot.as_of else None,
+    }
+
 def _serialize_categories(db:Session,user_id:int):
     existing={c.name:c.id for c in db.scalars(
         select(Category).where(Category.user_id==user_id).order_by(Category.name)
@@ -385,7 +468,9 @@ def transactions(
 
     if account_id is not None:
         stmt=stmt.where(Transaction.account_id==account_id)
-    if status:
+    if status=="review":
+        stmt=stmt.where(Transaction.verification_status.notin_(("verified","manual")))
+    elif status:
         stmt=stmt.where(Transaction.verification_status==status)
     if direction in ("debit","credit"):
         stmt=stmt.where(Transaction.direction==direction)
@@ -427,8 +512,8 @@ def serialize_tx(t):
         "verification_status":t.verification_status,
         "excluded":t.excluded_from_analytics,
         "account_id":t.account.id if t.account else None,
-        "account":t.account.name if t.account else "Cash",
-        "institution":t.account.institution if t.account else "Cash",
+        "account":t.account.name if t.account else ("Credit card" if t.payment_method=="credit_card" else "Cash"),
+        "institution":t.account.institution if t.account else ("Credit card" if t.payment_method=="credit_card" else "Cash"),
         "category":t.category.name if t.category else "Uncategorized",
         "category_source":t.category_source,
         "can_undo_category":bool(t.category_undo_available and t.category_source=="ai"),
@@ -480,27 +565,31 @@ def _create_manual_transaction(
             )
             db.add(account)
             db.flush()
-    else:
+    elif payment_method=="upi":
         if account_id is None:
             raise HTTPException(400,"Select the bank account used for this UPI transaction")
         account=db.get(Account,account_id)
         if not account or account.user_id!=user_id or account.type!="bank" or not account.is_active:
             raise HTTPException(400,"Select a valid active bank account for this UPI transaction")
+    else:
+        if direction!="debit":
+            raise HTTPException(400,"Credit card payment method is only for purchases")
+        account=None
 
     txn_type=(
         "income" if direction=="credit"
+        else "credit_card_purchase" if payment_method=="credit_card"
         else "investment" if category.name=="Investments"
         else "cash_expense" if payment_method=="cash"
         else "expense"
     )
     memo=(note or merchant or category.name).strip()
-    fp=fingerprint(account.id,txn_at,amount,direction,memo)
+    fp=fingerprint(account.id if account else 0,txn_at,amount,direction,memo)
     existing=db.scalar(
         select(Transaction)
         .join(TransactionSource,TransactionSource.transaction_id==Transaction.id)
         .where(
             Transaction.user_id==user_id,
-            Transaction.account_id==account.id,
             Transaction.fingerprint==fp,
             Transaction.payment_method==payment_method,
             TransactionSource.source_type=="manual",
@@ -512,7 +601,7 @@ def _create_manual_transaction(
 
     tx=Transaction(
         user_id=user_id,
-        account_id=account.id,
+        account_id=account.id if account else None,
         category_id=category.id,
         category_source="manual",
         category_previous_id=None,
@@ -525,9 +614,9 @@ def _create_manual_transaction(
         merchant=(merchant or note or category.name).strip(),
         description_raw=note.strip() if note else None,
         fingerprint=fp,
-        verification_status="manual",
+        verification_status="verified",
     )
-    source_name="Manual Cash Entry" if payment_method=="cash" else "Manual UPI Entry"
+    source_name=("Manual Cash Entry" if payment_method=="cash" else "Manual UPI Entry" if payment_method=="upi" else "Manual Credit Card Purchase")
     tx.sources.append(TransactionSource(source_type="manual",source_name=source_name))
     db.add(tx)
     db.commit()
@@ -648,6 +737,17 @@ def delete_transaction(tx_id:int, request:Request, db:Session=Depends(get_db)):
     db.commit()
     return {"ok":True}
 
+@app.post("/api/transactions/{tx_id}/verify")
+def verify_transaction(tx_id:int, request:Request, db:Session=Depends(get_db)):
+    user_id=current_user_id(request)
+    tx=db.get(Transaction,tx_id)
+    if not tx or tx.user_id!=user_id:
+        raise HTTPException(404,"Transaction not found")
+    tx.verification_status="verified"
+    db.commit()
+    db.refresh(tx)
+    return serialize_tx(tx)
+
 @app.patch("/api/transactions/{tx_id}/exclude")
 def exclude(tx_id:int, request:Request, db:Session=Depends(get_db)):
     user_id=current_user_id(request)
@@ -690,14 +790,18 @@ def summary(
         ),Decimal("0"))
         opening_cash_outflow=sum((
             t.amount for t in opening_items
-            if t.direction=="debit" and t.txn_type!="internal_transfer"
+            if t.direction=="debit"
+            and t.txn_type not in ("internal_transfer","credit_card_purchase")
+            and t.payment_method!="credit_card"
         ),Decimal("0"))
         opening_balance=opening_income-opening_spent
 
     income=opening_balance+new_income
     current_cash_outflow=sum((
         t.amount for t in items
-        if t.direction=="debit" and t.txn_type!="internal_transfer"
+        if t.direction=="debit"
+        and t.txn_type not in ("internal_transfer","credit_card_purchase")
+        and t.payment_method!="credit_card"
     ),Decimal("0"))
     liquid_balance=(opening_income if from_date is not None else Decimal("0"))-opening_cash_outflow+new_income-current_cash_outflow
 
@@ -718,9 +822,15 @@ def summary(
         else holding.invested_amount
         for holding in investment_rows
     ),Decimal("0"))
+    balance_state=None
+    if family_scope=="self" and family_user_id is None and len(transaction_user_ids)==1:
+        balance_state=_current_available_balance(db,transaction_user_ids[0])
+        if balance_state:
+            liquid_balance=balance_state["total"]
+
     net_worth=liquid_balance+investment_value-debt_outstanding
-    verified=sum(1 for t in items if t.verification_status=="verified")
-    review=sum(1 for t in items if t.verification_status=="needs_review")
+    verified=sum(1 for t in items if t.verification_status in ("verified","manual"))
+    review=sum(1 for t in items if t.verification_status not in ("verified","manual"))
     cats=defaultdict(Decimal)
     for t in items:
         if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment"):
@@ -792,6 +902,10 @@ def summary(
         "spent":float(spent),
         "available":float(max(Decimal("0"),liquid_balance)),
         "liquid_balance":float(liquid_balance),
+        "balance_configured":bool(balance_state),
+        "bank_balance":float(balance_state["bank_balance"]) if balance_state else None,
+        "cash_balance":float(balance_state["cash_balance"]) if balance_state else None,
+        "balance_as_of":balance_state["as_of"].isoformat() if balance_state and balance_state["as_of"] else None,
         "investment_value":float(investment_value),
         "debt_outstanding":float(debt_outstanding),
         "debt_count":len(debt_rows),
