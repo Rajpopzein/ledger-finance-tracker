@@ -227,12 +227,18 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
               <Box sx={{minWidth:0}}>
                 <Typography variant="body2" fontWeight={800} noWrap>{item.title}</Typography>
                 <Typography variant="caption" color="text.secondary" sx={{display:{xs:'block',sm:'none'}}}>
-                  {new Date(item.next_due_date).toLocaleDateString('en-IN')} · {item.source==='manual'?item.recurrence:item.source}
+                  {new Date(item.next_due_date).toLocaleDateString('en-IN')} · {item.source==='manual'?item.recurrence:item.source==='ai_predicted'?'AI predicted':item.source==='recurring'?'Recurring':item.source}
+                  {item.confidence?\` · ${Math.round(item.confidence*100)}%\`:''}
                 </Typography>
               </Box>
-              <Typography variant="caption" color={item.overdue?'warning.main':'text.secondary'} sx={{display:{xs:'none',sm:'block'}}}>
-                {new Date(item.next_due_date).toLocaleDateString('en-IN')}
-              </Typography>
+              <Box sx={{display:{xs:'none',sm:'block'}}}>
+                <Typography variant="caption" color={item.overdue?'warning.main':'text.secondary'} sx={{display:'block'}}>
+                  {new Date(item.next_due_date).toLocaleDateString('en-IN')}
+                </Typography>
+                {(item.source==='recurring'||item.source==='ai_predicted')&&<Typography variant="caption" color="text.secondary">
+                  {item.source==='recurring'?'Recurring':'AI predicted'}{item.confidence?\` · ${Math.round(item.confidence*100)}%\`:''}
+                </Typography>}
+              </Box>
               <Typography variant="body2" fontWeight={850} textAlign="right">{money(item.amount)}</Typography>
               <Stack direction="row" spacing={.25} justifyContent="flex-end" sx={{gridColumn:{xs:'1 / -1',sm:'auto'}}}>
                 {item.source==='manual'&&<Button size="small" variant="outlined" disabled={busy==='commitment-complete:'+item.id} onClick={()=>completeCommitment(Number(item.id))}>Paid</Button>}
