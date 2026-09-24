@@ -1,3 +1,4 @@
+import {invalidateViewCache} from '../viewCache'
 const IS_NATIVE_APP=
   Boolean(import.meta.env.TAURI_ENV_PLATFORM)||
   (typeof window!=='undefined'&&(
@@ -49,6 +50,11 @@ async function req<T>(path:string,init?:RequestInit):Promise<T>{
           ? body
           : r.statusText || `Request failed with status ${r.status}`
     throw new Error(message)
+  }
+
+  const method=(init?.method||'GET').toUpperCase()
+  if(method!=='GET'&&method!=='HEAD'){
+    invalidateViewCache()
   }
 
   return body as T
