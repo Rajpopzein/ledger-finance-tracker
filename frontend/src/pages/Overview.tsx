@@ -229,6 +229,98 @@ function RecentCard({tx,mode,onAll}:{tx:Tx[];mode:'light'|'dark';onAll:()=>void}
   </Paper>
 }
 
+function AccountingControlCard({mode}:{mode:'light'|'dark'}){
+  const [history,setHistory]=useState<any[]>([])
+  const [closes,setCloses]=useState<any[]>([])
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+  const [notice,setNotice]=useState('')
+
+  const now=new Date()
+  const previousMonth=new Date(now.getFullYear(),now.getMonth()-1,1)
+  const targetKey=`${previousMonth.getFullYear()}-${String(previousMonth.getMonth()+1).padStart(2,'0')}`
+  const targetLabel=previousMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'})
+  const alreadyClosed=closes.some((row:any)=>row.month_key===targetKey)
+
+  async function loadAccounting(){
+    try{
+      const [historyResult,closeResult]=await Promise.all([
+        api.balanceHistory(5),
+        api.monthlyCloses(),
+      ])
+      setHistory(historyResult?.items||[])
+      setCloses(closeResult?.items||[])
+    }catch(e:any){
+      setError(e.message||'Could not load accounting history.')
+    }
+  }
+
+  useEffect(()=>{loadAccounting()},[])
+
+  async function closePreviousMonth(){
+    if(!window.confirm(`Close ${targetLabel}? This stores an immutable month-end snapshot for reconciliation and reporting.`))return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try{
+      const result=await api.createMonthlyClose(targetKey)
+      setNotice(result?.already_closed?`${targetLabel} was already closed.`:`${targetLabel} closed successfully.`)
+      await loadAccounting()
+    }catch(e:any){
+      setError(e.message||'Could not close this month.')
+    }finally{
+      setBusy(false)
+    }
+  }
+
+  const latestClose=closes[0]
+
+  return <Paper sx={{...claySx(mode),p:{xs:1.4,sm:2}}}>
+    <Stack direction={{xs:'column',md:'row'}} justifyContent="space-between" spacing={2}>
+      <Box sx={{flex:1,minWidth:0}}>
+        <Typography variant="overline" color="text.secondary">ACCOUNTING CONTROL</Typography>
+        <Typography variant="h2">Month close & balance history</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{mt:.45}}>
+          Balance adjustments remain auditable, and completed months can be frozen as reporting snapshots.
+        </Typography>
+
+        <Stack spacing={.75} sx={{mt:1.5}}>
+          {history.slice(0,3).map((row:any)=><Stack key={row.id} direction="row" justifyContent="space-between" spacing={1}>
+            <Typography variant="body2" color="text.secondary">
+              {new Date(row.as_of).toLocaleString('en-IN')}
+            </Typography>
+            <Typography variant="body2" fontWeight={800}>{money(row.total)}</Typography>
+          </Stack>)}
+          {!history.length&&<Typography variant="body2" color="text.secondary">
+            No balance adjustments recorded yet. Your next balance update will start the history.
+          </Typography>}
+        </Stack>
+      </Box>
+
+      <Box sx={{minWidth:{md:280}}}>
+        {latestClose?<Paper variant="outlined" sx={{p:1.25,borderRadius:2,mb:1}}>
+          <Typography variant="caption" color="text.secondary">LATEST CLOSED MONTH</Typography>
+          <Typography fontWeight={850} sx={{mt:.25}}>{latestClose.month_key} · {money(latestClose.closing_balance)}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Savings {money(latestClose.savings)}
+          </Typography>
+        </Paper>:<Alert severity="info" sx={{mb:1}}>No month has been closed yet.</Alert>}
+
+        <Button
+          fullWidth
+          variant={alreadyClosed?'outlined':'contained'}
+          disabled={busy||alreadyClosed}
+          onClick={closePreviousMonth}
+        >
+          {alreadyClosed?`${targetLabel} closed`:busy?'Closing…':`Close ${targetLabel}`}
+        </Button>
+        {notice&&<Alert severity="success" sx={{mt:1}}>{notice}</Alert>}
+        {error&&<Alert severity="error" sx={{mt:1}}>{error}</Alert>}
+      </Box>
+    </Stack>
+  </Paper>
+}
+
 function BalanceDialog({
   open,
   onClose,
@@ -449,6 +541,7 @@ export default function Overview(){
 
   const cards={
     spending:<MonthlySpendingCard s={s} mode={resolvedMode}/>,
+    accounting:<AccountingControlCard mode={resolvedMode}/>,
     flow:<CashFlowCard s={s} mode={resolvedMode}/>,
     category:<CategoryCard s={s} mode={resolvedMode}/>,
     family:<FamilyCard s={s} periodLabel={period.label} mode={resolvedMode}/>,
@@ -459,6 +552,7 @@ export default function Overview(){
     {hero}
     {metrics}
     {cards.spending}
+    {cards.accounting}
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1.15fr .85fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{cards.family}</Box>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:{xs:1.15,sm:2}}}>{cards.recent}{cards.category}</Box>
   </>
@@ -476,6 +570,7 @@ export default function Overview(){
   const insights=<>
     {metrics}
     {cards.spending}
+    {cards.accounting}
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.4fr .6fr'},gap:{xs:1.15,sm:2}}}>{cards.flow}{hero}</Box>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 1fr 1fr'},gap:{xs:1.15,sm:2}}}>
       {cards.category}
