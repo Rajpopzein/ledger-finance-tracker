@@ -4,11 +4,11 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pypdf import PdfReader
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Account, Category, CreditCardTransactionLink, Debt, DebtPayment, Transaction, TransactionSource
+from .models import Account, Category, CreditCardTransactionLink, Debt, DebtPayment, InternalTransfer, Transaction, TransactionSource
 from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate, TransactionUpdate
 from .services.ai import categorize_transactions, extract_debt_from_document
 from .services.dedupe import fingerprint
@@ -138,7 +138,20 @@ def update_transaction(
             CreditCardTransactionLink.transaction_id == tx.id
         )
     )
+    transfer = db.scalar(
+        select(InternalTransfer).where(
+            or_(
+                InternalTransfer.outgoing_transaction_id == tx.id,
+                InternalTransfer.incoming_transaction_id == tx.id,
+            )
+        )
+    )
     values = body.model_dump(exclude_unset=True)
+    if transfer and values:
+        raise HTTPException(
+            400,
+            "Own-account transfers are linked pairs. Delete and recreate the transfer to change it.",
+        )
     if link and link.entry_type == "payment" and any(
         key in values for key in ("amount", "direction", "account_id")
     ):
@@ -213,6 +226,29 @@ def delete_transaction(
     tx = db.get(Transaction, tx_id)
     if not tx or tx.user_id != user_id:
         raise HTTPException(404, "Transaction not found")
+    transfer = db.scalar(
+        select(InternalTransfer).where(
+            or_(
+                InternalTransfer.outgoing_transaction_id == tx.id,
+                InternalTransfer.incoming_transaction_id == tx.id,
+            )
+        )
+    )
+    if transfer:
+        counterpart_id = (
+            transfer.incoming_transaction_id
+            if transfer.outgoing_transaction_id == tx.id
+            else transfer.outgoing_transaction_id
+        )
+        counterpart = db.get(Transaction, counterpart_id)
+        db.delete(transfer)
+        db.flush()
+        if counterpart:
+            db.delete(counterpart)
+        db.delete(tx)
+        db.commit()
+        return {"ok": True, "deleted_transfer_pair": True}
+
     link = db.scalar(
         select(CreditCardTransactionLink).where(
             CreditCardTransactionLink.transaction_id == tx.id
@@ -251,6 +287,16 @@ def set_transaction_category(
     tx = db.get(Transaction, tx_id)
     if not tx or tx.user_id != user_id:
         raise HTTPException(404, "Transaction not found")
+    transfer = db.scalar(
+        select(InternalTransfer).where(
+            or_(
+                InternalTransfer.outgoing_transaction_id == tx.id,
+                InternalTransfer.incoming_transaction_id == tx.id,
+            )
+        )
+    )
+    if transfer:
+        raise HTTPException(400, "Internal Transfer category cannot be changed")
     requested = body.category.strip()
     if requested.lower() == "uncategorized":
         tx.category_id = None
