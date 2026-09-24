@@ -1037,7 +1037,7 @@ async def preview(request:Request, account_id:int=Form(...), file:UploadFile=Fil
     for row in rows:
         match,method,score=find_match(db,account_id=account_id,txn_at=row["txn_at"],amount=row["amount"],direction=row["direction"],description=row["description"],bank_ref=row.get("bank_ref"))
         state="new"
-        if match and method in ("upi_ref","bank_ref","fingerprint"):
+        if match and method in ("upi_ref","bank_ref","fingerprint","manual_amount_date"):
             state = "existing" if match.verification_status == "verified" else "matched"
         elif match:
             state="review"
