@@ -27,6 +27,7 @@ from .shortcuts import router as shortcuts_router
 from .investments import router as investments_router
 from .accounting_core import router as accounting_core_router
 from .planning import router as planning_router
+from .bills import router as bills_router
 from .users import router as users_router, current_user_id, linked_user_ids, resolve_ai_provider_user_id, require_family_ai_insights, scoped_family_user_ids, shared_linked_user_ids
 from .services.auth import (
     SESSION_COOKIE,
@@ -52,6 +53,7 @@ app.include_router(shortcuts_router)
 app.include_router(investments_router)
 app.include_router(accounting_core_router)
 app.include_router(planning_router)
+app.include_router(bills_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(CONFIGURED_CORS_ORIGINS|NATIVE_APP_ORIGINS),
