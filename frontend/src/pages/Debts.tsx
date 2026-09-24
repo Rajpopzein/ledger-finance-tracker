@@ -9,6 +9,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Menu,
   MenuItem,
   Paper,
   Stack,
@@ -27,6 +29,8 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import PaidRoundedIcon from '@mui/icons-material/PaidRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
+import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
+import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded'
 import type {Debt,DebtList} from '../types'
 import {api} from '../api/client'
 import {useFamily} from '../family'
@@ -74,6 +78,9 @@ export default function Debts(){
   const [editForm,setEditForm]=useState(emptyForm())
   const [payment,setPayment]=useState<Record<number,string>>({})
   const [paymentSource,setPaymentSource]=useState<Record<number,string>>({})
+  const [actionAnchor,setActionAnchor]=useState<HTMLElement|null>(null)
+  const [actionDebt,setActionDebt]=useState<Debt|null>(null)
+  const [actionActive,setActionActive]=useState(false)
   const [busy,setBusy]=useState('')
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
@@ -324,7 +331,7 @@ export default function Debts(){
       commitment:145,
       due:135,
       payment:350,
-      actions:230,
+      actions:72,
     }
     const fixed=(width:number)=>({width,minWidth:width,maxWidth:width})
     const minWidth=
@@ -410,20 +417,19 @@ export default function Debts(){
                   </Button>
                 </Stack>
               </TableCell>}
-              {canManage&&<TableCell sx={fixed(widths.actions)}>
-                <Stack direction="row" spacing={0.5} sx={{whiteSpace:'nowrap'}}>
-                  <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(debt)}>Edit</Button>
-                  {activeRows&&<Button size="small" disabled={busy==='close:'+debt.id} onClick={()=>closeDebt(debt)}>Close</Button>}
-                  <Button
-                    size="small"
-                    color="error"
-                    startIcon={<DeleteOutlineRoundedIcon/>}
-                    disabled={busy==='delete:'+debt.id}
-                    onClick={()=>deleteDebt(debt)}
-                  >
-                    Delete
-                  </Button>
-                </Stack>
+              {canManage&&<TableCell sx={{...fixed(widths.actions),textAlign:'center'}}>
+                <IconButton
+                  size="small"
+                  aria-label={`Actions for ${debt.lender}`}
+                  disabled={busy==='close:'+debt.id||busy==='delete:'+debt.id||busy==='edit:'+debt.id}
+                  onClick={event=>{
+                    setActionAnchor(event.currentTarget)
+                    setActionDebt(debt)
+                    setActionActive(activeRows)
+                  }}
+                >
+                  <MoreVertRoundedIcon/>
+                </IconButton>
               </TableCell>}
             </TableRow>
           })}
@@ -505,6 +511,48 @@ export default function Debts(){
         </Button>
       </Stack>
     </Paper>
+
+    <Menu
+      anchorEl={actionAnchor}
+      open={Boolean(actionAnchor&&actionDebt)}
+      onClose={()=>{
+        setActionAnchor(null)
+        setActionDebt(null)
+      }}
+      anchorOrigin={{vertical:'bottom',horizontal:'right'}}
+      transformOrigin={{vertical:'top',horizontal:'right'}}
+    >
+      <MenuItem onClick={()=>{
+        const debt=actionDebt
+        setActionAnchor(null)
+        setActionDebt(null)
+        if(debt)startEdit(debt)
+      }}>
+        <EditRoundedIcon fontSize="small" sx={{mr:1.25}}/>
+        Edit
+      </MenuItem>
+      {actionActive&&<MenuItem onClick={()=>{
+        const debt=actionDebt
+        setActionAnchor(null)
+        setActionDebt(null)
+        if(debt)closeDebt(debt)
+      }}>
+        <CheckCircleOutlineRoundedIcon fontSize="small" sx={{mr:1.25}}/>
+        Close liability
+      </MenuItem>}
+      <MenuItem
+        sx={{color:'error.main'}}
+        onClick={()=>{
+          const debt=actionDebt
+          setActionAnchor(null)
+          setActionDebt(null)
+          if(debt)deleteDebt(debt)
+        }}
+      >
+        <DeleteOutlineRoundedIcon fontSize="small" sx={{mr:1.25}}/>
+        Delete
+      </MenuItem>
+    </Menu>
 
     <Dialog
       open={addOpen}
