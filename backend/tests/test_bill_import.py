@@ -211,7 +211,7 @@ def test_upi_bill_uses_paid_at_to_reduce_current_available_balance():
     )
 
     tx = db.get(Transaction, result["transaction_id"])
-    assert tx.txn_at == paid_at
+    assert tx.txn_at.replace(tzinfo=timezone.utc) == paid_at
     assert result["bill_date"] == "2026-09-01"
 
     state = _current_available_balance(db, user.id)
