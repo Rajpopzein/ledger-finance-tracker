@@ -228,7 +228,7 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
                 <Typography variant="body2" fontWeight={800} noWrap>{item.title}</Typography>
                 <Typography variant="caption" color="text.secondary" sx={{display:{xs:'block',sm:'none'}}}>
                   {new Date(item.next_due_date).toLocaleDateString('en-IN')} · {item.source==='manual'?item.recurrence:item.source==='ai_predicted'?'AI predicted':item.source==='recurring'?'Recurring':item.source}
-                  {item.confidence?\` · ${Math.round(item.confidence*100)}%\`:''}
+                  {item.confidence?` · ${Math.round(item.confidence*100)}%`:''}
                 </Typography>
               </Box>
               <Box sx={{display:{xs:'none',sm:'block'}}}>
@@ -236,7 +236,7 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
                   {new Date(item.next_due_date).toLocaleDateString('en-IN')}
                 </Typography>
                 {(item.source==='recurring'||item.source==='ai_predicted')&&<Typography variant="caption" color="text.secondary">
-                  {item.source==='recurring'?'Recurring':'AI predicted'}{item.confidence?\` · ${Math.round(item.confidence*100)}%\`:''}
+                  {item.source==='recurring'?'Recurring':'AI predicted'}{item.confidence?` · ${Math.round(item.confidence*100)}%`:''}
                 </Typography>}
               </Box>
               <Typography variant="body2" fontWeight={850} textAlign="right">{money(item.amount)}</Typography>
