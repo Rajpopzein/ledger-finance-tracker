@@ -23,6 +23,9 @@ import DashboardCustomizeRoundedIcon from '@mui/icons-material/DashboardCustomiz
 import {api} from '../api/client'
 import {useAppData} from '../appData'
 import {claySx,useUI} from '../ui'
+import SectionNav from '../components/SectionNav'
+
+type SettingsTab='appearance'|'accounts'|'ai'|'privacy'
 
 const templates=[
   {
@@ -74,7 +77,7 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
   const [msg,setMsg]=useState('')
   const [acc,setAcc]=useState({institution:'',account_mask:'',name:''})
   const [prefMsg,setPrefMsg]=useState('')
-
+  const [section,setSection]=useState<SettingsTab>('appearance')
 
   useEffect(()=>{
     setS((p:any)=>({...p,...aiSettings,provider:aiSettings.provider||'',api_key:''}))
@@ -107,7 +110,19 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
       <Typography color="text.secondary" sx={{mt:.7}}>Personalize Ledger, manage your accounts and configure AI privacy.</Typography>
     </Box>}
 
-    <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
+    <SectionNav
+      value={section}
+      onChange={setSection}
+      ariaLabel="Settings sections"
+      items={[
+        {value:'appearance',label:'Appearance'},
+        {value:'accounts',label:'Accounts'},
+        {value:'ai',label:'AI Provider'},
+        {value:'privacy',label:'AI Privacy'},
+      ]}
+    />
+
+    {section==='appearance'&&<><Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{mb:2}}>
         <DashboardCustomizeRoundedIcon color="primary"/>
         <Box>
@@ -168,10 +183,9 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
         </Button>
         {prefMsg&&<Alert severity="success" sx={{py:0}}>{prefMsg}</Alert>}
       </Stack>
-    </Paper>
+    </Paper></>}
 
-    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',lg:'1fr 1fr'},gap:2}}>
-      <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
+    {section==='accounts'&&<Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
         <Typography variant="h2">Bank accounts</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mb:2}}>Only your own accounts are shown here.</Typography>
 
@@ -196,9 +210,9 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
           <TextField label="Display name (optional)" value={acc.name} placeholder="HDFC Salary" onChange={e=>setAcc({...acc,name:e.target.value})}/>
           <Button variant="contained" onClick={addAccount} disabled={!acc.institution.trim()}>Add bank account</Button>
         </Stack>
-      </Paper>
+      </Paper>}
 
-      <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
+    {section==='ai'&&<Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
         <Typography variant="h2">AI provider</Typography>
         <Typography variant="body2" color="text.secondary" sx={{mb:2}}>Configuration and API keys are private to your user account.</Typography>
 
@@ -224,10 +238,9 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
           <Button variant="contained" onClick={saveAI}>Save AI settings</Button>
           {msg&&<Alert severity="success">{msg}</Alert>}
         </Stack>
-      </Paper>
-    </Box>
+      </Paper>}
 
-    <Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
+    {section==='privacy'&&<Paper sx={{...clay,p:{xs:1.5,sm:2.25}}}>
       <Typography variant="h2">AI privacy</Typography>
       <Typography variant="body2" color="text.secondary" sx={{mb:1.5}}>Choose what calculated data may be sent to your configured model.</Typography>
 
@@ -249,6 +262,6 @@ export default function Settings({embedded=false}:{embedded?:boolean}){
       <Alert severity="info" sx={{mt:1.5}}>
         Full account numbers, UPI IDs, bank/UTR references and raw statement files are never sent to cloud AI.
       </Alert>
-    </Paper>
+    </Paper>}
   </Stack>
 }
