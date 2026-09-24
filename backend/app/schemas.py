@@ -162,6 +162,10 @@ class ReconciliationResolve(BaseModel):
 class MonthlyCloseCreate(BaseModel):
     month_key: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
 
+class MonthEndBalanceUpdate(BaseModel):
+    bank_balance: Decimal = Field(ge=0)
+    cash_balance: Decimal = Field(ge=0)
+
 
 class TransactionUpdate(BaseModel):
     account_id: int | None = None
