@@ -560,6 +560,7 @@ export default function Overview(){
   const focus=<>
     {hero}
     {metrics}
+    {cards.accounting}
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',xl:'1.35fr .65fr'},gap:{xs:1.15,sm:2}}}>
       {cards.recent}
       {cards.category}
