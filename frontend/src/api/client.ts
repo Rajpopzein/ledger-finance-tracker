@@ -156,7 +156,12 @@ export const api={
    return req<any>('/debts/ai-preview',{method:'POST',body:f})
  },
  balance:()=>req<any>('/balance'),
+ balanceHistory:(limit=30)=>req<any>(`/balance/history?limit=${limit}`),
  updateBalance:(body:{bank_balance:number;cash_balance:number;as_of?:string|null})=>req<any>('/balance',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ monthlyCloses:()=>req<any>('/monthly-closes'),
+ createMonthlyClose:(monthKey:string)=>req<any>('/monthly-closes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month_key:monthKey})}),
+ reconciliation:(status='needs_review')=>req<any>(`/reconciliation?status=${encodeURIComponent(status)}`),
+ resolveReconciliation:(id:number,action:'merge'|'keep_both'|'ignore')=>req<any>(`/reconciliation/${id}/resolve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
  accounts:()=>req<any[]>('/accounts'),
  createAccount:(body:any)=>req<any>('/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  categories:()=>req<any[]>('/categories'),
@@ -174,6 +179,7 @@ export const api={
    direction:'credit'|'debit'
    payment_method:'cash'|'upi'|'credit_card'
    account_id?:number|null
+   credit_card_id?:number|null
    category:string
    txn_at:string
    merchant?:string|null
