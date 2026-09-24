@@ -1,4 +1,5 @@
 name: Validate Balance Review Changes
+# Temporary pre-merge validation only
 
 on:
   pull_request:
