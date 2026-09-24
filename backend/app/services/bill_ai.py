@@ -27,7 +27,7 @@ async def extract_bill_from_document(
         "Extract the expense represented by this bill. "
         "Use ISO YYYY-MM-DD for bill_date. "
         "Numbers must not contain currency symbols or commas. "
-        "payment_method_suggestion must be one of cash, upi, credit_card, unknown. "
+        "payment_method_suggestion must be one of cash, upi, bank, credit_card, unknown. "
         "Use unknown when payment method is not clearly shown. "
         "Use null for unsupported fields.\n\n"
         "Return exactly this JSON shape:\n"
@@ -120,7 +120,7 @@ async def extract_bill_from_document(
         "note": redact_sensitive_text(str(data.get("note") or ""))[:1000] or None,
         "confidence": data.get("confidence", 0.0),
     }
-    if result["payment_method_suggestion"] not in {"cash", "upi", "credit_card", "unknown"}:
+    if result["payment_method_suggestion"] not in {"cash", "upi", "bank", "credit_card", "unknown"}:
         result["payment_method_suggestion"] = "unknown"
     for key in ("total_amount", "subtotal", "tax_amount"):
         value = result[key]
