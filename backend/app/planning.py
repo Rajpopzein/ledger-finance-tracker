@@ -23,7 +23,7 @@ from .models import (
     Transaction,
     TransactionSource,
 )
-from .schemas import BudgetUpsert, CommitmentCreate, CommitmentUpdate, InternalTransferCreate
+from .schemas import BudgetUpsert, CommitmentCreate, CommitmentPaymentCreate, CommitmentUpdate, InternalTransferCreate
 from .services.dedupe import fingerprint
 from .users import current_user_id
 
@@ -454,18 +454,88 @@ def complete_commitment(
     commitment_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    body: CommitmentPaymentCreate | None = None,
 ):
     user_id = current_user_id(request)
     row = db.get(Commitment, commitment_id)
     if not row or row.user_id != user_id:
         raise HTTPException(404, "Commitment not found")
+
+    payment_transaction_id = None
+    if body is not None:
+        if body.payment_method == "cash":
+            account = db.scalar(
+                select(Account).where(
+                    Account.user_id == user_id,
+                    Account.type == "cash",
+                    Account.is_active == True,
+                )
+            )
+            if not account:
+                account = Account(
+                    user_id=user_id,
+                    name="Cash",
+                    institution="Cash",
+                    type="cash",
+                    is_active=True,
+                )
+                db.add(account)
+                db.flush()
+        else:
+            if body.account_id is None:
+                raise HTTPException(400, "Select the bank account used for this UPI payment")
+            account = db.get(Account, body.account_id)
+            if (
+                not account
+                or account.user_id != user_id
+                or account.type != "bank"
+                or not account.is_active
+            ):
+                raise HTTPException(400, "Select a valid active bank account")
+
+        category = row.category or _category(db, user_id, "Bills & Subscriptions")
+        description = f"Commitment payment · {row.title}"
+        fp = fingerprint(
+            account.id,
+            body.paid_at,
+            row.amount,
+            "debit",
+            description,
+        )
+        tx = Transaction(
+            user_id=user_id,
+            account_id=account.id,
+            category_id=category.id,
+            category_source="manual",
+            txn_at=body.paid_at,
+            amount=row.amount,
+            direction="debit",
+            txn_type="expense",
+            payment_method=body.payment_method,
+            merchant=row.title,
+            description_raw=description,
+            fingerprint=fp,
+            verification_status="verified",
+        )
+        tx.sources.append(
+            TransactionSource(
+                source_type="manual",
+                source_name="Commitment Payment",
+            )
+        )
+        db.add(tx)
+        db.flush()
+        payment_transaction_id = tx.id
+
     if row.recurrence == "monthly":
         row.next_due_date = _add_month(row.next_due_date)
     else:
         row.is_active = False
     db.commit()
     db.refresh(row)
-    return _serialize_commitment(row, datetime.now(timezone.utc))
+    result = _serialize_commitment(row, datetime.now(timezone.utc))
+    result["payment_transaction_id"] = payment_transaction_id
+    return result
 
 
 @router.delete("/api/commitments/{commitment_id}")
