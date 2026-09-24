@@ -64,6 +64,18 @@ class ManualTransactionCreate(BaseModel):
     merchant: str | None = Field(default=None, max_length=160)
     note: str | None = Field(default=None, max_length=2000)
 
+class BillExpenseCreate(BaseModel):
+    amount: Decimal = Field(gt=0)
+    payment_method: str = Field(pattern="^(cash|upi|credit_card)$")
+    account_id: int | None = None
+    credit_card_id: int | None = None
+    category: str = Field(min_length=1, max_length=80)
+    txn_at: datetime
+    merchant: str = Field(min_length=1, max_length=160)
+    note: str | None = Field(default=None, max_length=2000)
+    source_file_name: str | None = Field(default=None, max_length=255)
+    source_hash: str | None = Field(default=None, min_length=16, max_length=64)
+
 class InternalTransferCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     from_account_id: int
