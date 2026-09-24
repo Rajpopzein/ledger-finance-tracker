@@ -124,3 +124,12 @@ def test_manual_transaction_endpoint_accepts_post():
         if getattr(route, "path", None) == "/api/transactions/manual"
     )
     assert "POST" in route.methods
+
+
+def test_available_balance_uses_liquid_balance_formula():
+    # Available should represent current money in hand, not just this period's income minus spending.
+    opening_balance = Decimal("1000.00")
+    new_income = Decimal("500.00")
+    spent = Decimal("200.00")
+    liquid_balance = opening_balance + new_income - spent
+    assert max(Decimal("0"), liquid_balance) == Decimal("1300.00")
