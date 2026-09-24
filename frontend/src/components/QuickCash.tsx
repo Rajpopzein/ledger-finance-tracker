@@ -24,7 +24,7 @@ const defaults=['Food & Dining','Fuel','Groceries','EMI & Loans','Shopping','Bil
 const initialForm=()=>({
   amount:'',
   direction:'debit' as 'credit'|'debit',
-  payment_method:'cash' as 'cash'|'upi',
+  payment_method:'cash' as 'cash'|'upi'|'credit_card',
   account_id:'',
   category:'Food & Dining',
   txn_at:new Date().toISOString().slice(0,16),
@@ -56,19 +56,20 @@ export default function QuickCash({
     setForm(current=>({
       ...current,
       direction,
+      payment_method:direction==='credit'&&current.payment_method==='credit_card'?'cash':current.payment_method,
       category:direction==='credit'
         ? (current.category==='Food & Dining'?'Payroll':current.category)
         : (current.category==='Payroll'?'Food & Dining':current.category),
     }))
   }
 
-  function setPaymentMethod(payment_method:'cash'|'upi'){
+  function setPaymentMethod(payment_method:'cash'|'upi'|'credit_card'){
     setForm(current=>({
       ...current,
       payment_method,
-      account_id:payment_method==='cash'
-        ? ''
-        : current.account_id||String(bankAccounts[0]?.id||''),
+      account_id:payment_method==='upi'
+        ? current.account_id||String(bankAccounts[0]?.id||'')
+        : '',
     }))
   }
 
@@ -136,10 +137,11 @@ export default function QuickCash({
             size="small"
             value={form.payment_method}
             disabled={saving}
-            onChange={(_,value:'cash'|'upi'|null)=>{if(value)setPaymentMethod(value)}}
+            onChange={(_,value:'cash'|'upi'|'credit_card'|null)=>{if(value)setPaymentMethod(value)}}
           >
             <ToggleButton value="cash">Cash</ToggleButton>
             <ToggleButton value="upi">UPI</ToggleButton>
+            {!isIncome&&<ToggleButton value="credit_card">Credit card</ToggleButton>}
           </ToggleButtonGroup>
         </Stack>
 
@@ -158,6 +160,10 @@ export default function QuickCash({
 
         {upiUnavailable&&<Alert severity="warning">
           Add a bank account first before recording a manual UPI transaction.
+        </Alert>}
+
+        {form.payment_method==='credit_card'&&<Alert severity="info">
+          Credit-card purchases count as spending but do not reduce your available bank or cash balance.
         </Alert>}
 
         <TextField
