@@ -1,0 +1,23 @@
+name: Validate Dashboard Investment UI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/validate-dashboard-investment-ui.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+      - name: Frontend production build
+        working-directory: frontend
+        run: npm run build
