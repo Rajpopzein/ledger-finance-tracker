@@ -48,10 +48,15 @@ class CashTransactionCreate(BaseModel):
     txn_at: datetime
     note: str | None = None
 
+class AvailableBalanceUpdate(BaseModel):
+    bank_balance: Decimal = Field(ge=0)
+    cash_balance: Decimal = Field(ge=0)
+    as_of: datetime | None = None
+
 class ManualTransactionCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     direction: str = Field(default="debit", pattern="^(credit|debit)$")
-    payment_method: str = Field(default="cash", pattern="^(cash|upi)$")
+    payment_method: str = Field(default="cash", pattern="^(cash|upi|credit_card)$")
     account_id: int | None = None
     category: str = Field(min_length=1, max_length=80)
     txn_at: datetime
