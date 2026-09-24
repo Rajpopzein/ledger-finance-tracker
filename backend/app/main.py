@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, AvailableBalance, Category, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, InvestmentHolding
+from .models import Account, AvailableBalance, BalanceSnapshot, Category, CreditCardTransactionLink, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, DebtPayment, InvestmentHolding
 from .schemas import AccountCreate, AvailableBalanceUpdate, CashTransactionCreate, ManualTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -25,6 +25,7 @@ from .bank_imports import router as bank_imports_router
 from .finance_features import router as finance_features_router
 from .shortcuts import router as shortcuts_router
 from .investments import router as investments_router
+from .accounting_core import router as accounting_core_router
 from .users import router as users_router, current_user_id, linked_user_ids, resolve_ai_provider_user_id, require_family_ai_insights, scoped_family_user_ids, shared_linked_user_ids
 from .services.auth import (
     SESSION_COOKIE,
@@ -48,6 +49,7 @@ app.include_router(users_router)
 app.include_router(finance_features_router)
 app.include_router(shortcuts_router)
 app.include_router(investments_router)
+app.include_router(accounting_core_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(CONFIGURED_CORS_ORIGINS|NATIVE_APP_ORIGINS),
@@ -307,6 +309,13 @@ def set_available_balance(body:AvailableBalanceUpdate, request:Request, db:Sessi
             as_of=as_of,
         )
         db.add(snapshot)
+    db.add(BalanceSnapshot(
+        user_id=user_id,
+        bank_balance=body.bank_balance,
+        cash_balance=body.cash_balance,
+        as_of=as_of,
+        source="manual",
+    ))
     db.commit()
     db.refresh(snapshot)
     return {
@@ -432,7 +441,7 @@ def _filtered_stmt(
 def _spending_breakdown(items):
     spending=[
         t for t in items
-        if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
+        if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment","credit_card_payment")
     ]
     credit_card=[
         t for t in spending
@@ -562,6 +571,7 @@ def _create_manual_transaction(
     note:str|None,
     account_id:int|None,
     db:Session,
+    credit_card_id:int|None=None,
 ):
     category=db.scalar(
         select(Category).where(
@@ -601,6 +611,17 @@ def _create_manual_transaction(
         if direction!="debit":
             raise HTTPException(400,"Credit card payment method is only for purchases")
         account=None
+        credit_card=None
+        if credit_card_id is not None:
+            credit_card=db.get(Debt,credit_card_id)
+            if (
+                not credit_card
+                or credit_card.user_id!=user_id
+                or credit_card.debt_type!="credit_card"
+            ):
+                raise HTTPException(400,"Select a valid credit card")
+    if payment_method!="credit_card":
+        credit_card=None
 
     txn_type=(
         "income" if direction=="credit"
@@ -645,6 +666,18 @@ def _create_manual_transaction(
     source_name=("Manual Cash Entry" if payment_method=="cash" else "Manual UPI Entry" if payment_method=="upi" else "Manual Credit Card Purchase")
     tx.sources.append(TransactionSource(source_type="manual",source_name=source_name))
     db.add(tx)
+    db.flush()
+    if credit_card is not None:
+        credit_card.outstanding_balance=Decimal(credit_card.outstanding_balance)+amount
+        if credit_card.status=="closed":
+            credit_card.status="active"
+        db.add(CreditCardTransactionLink(
+            user_id=user_id,
+            transaction_id=tx.id,
+            debt_id=credit_card.id,
+            entry_type="purchase",
+            amount=amount,
+        ))
     db.commit()
     db.refresh(tx)
     return serialize_tx(tx)
@@ -662,6 +695,7 @@ def create_manual_transaction(body:ManualTransactionCreate, request:Request, db:
         merchant=body.merchant,
         note=body.note,
         account_id=body.account_id,
+        credit_card_id=body.credit_card_id,
         db=db,
     )
 
@@ -679,6 +713,7 @@ def create_cash(body:CashTransactionCreate, request:Request, db:Session=Depends(
         merchant=None,
         note=body.note,
         account_id=None,
+        credit_card_id=None,
         db=db,
     )
 
@@ -694,7 +729,11 @@ def update_transaction(
     if not tx or tx.user_id!=user_id:
         raise HTTPException(404,"Transaction not found")
 
+    link=db.scalar(select(CreditCardTransactionLink).where(CreditCardTransactionLink.transaction_id==tx.id))
     values=body.model_dump(exclude_unset=True)
+    if link and link.entry_type=="payment" and any(key in values for key in ("amount","direction","account_id")):
+        raise HTTPException(400,"Edit credit-card payments from the liability tracker")
+    old_amount=Decimal(tx.amount)
 
     if "account_id" in values:
         account_id=values.pop("account_id")
@@ -739,7 +778,20 @@ def update_transaction(
         if key in values:
             setattr(tx,attr,values[key])
 
-    if old_type in ("income","expense") and "direction" in values:
+    if link and link.entry_type=="purchase":
+        if tx.direction!="debit":
+            raise HTTPException(400,"Credit-card purchases must remain outgoing transactions")
+        debt=db.get(Debt,link.debt_id)
+        if debt and tx.amount!=old_amount:
+            debt.outstanding_balance=max(
+                Decimal("0"),
+                Decimal(debt.outstanding_balance)+Decimal(tx.amount)-old_amount,
+            )
+        link.amount=tx.amount
+        tx.txn_type="credit_card_purchase"
+    elif link and link.entry_type=="payment":
+        tx.txn_type="credit_card_payment"
+    elif old_type in ("income","expense") and "direction" in values:
         tx.txn_type="income" if tx.direction=="credit" else "expense"
 
     tx.fingerprint=fingerprint(
@@ -759,6 +811,20 @@ def delete_transaction(tx_id:int, request:Request, db:Session=Depends(get_db)):
     tx=db.get(Transaction,tx_id)
     if not tx or tx.user_id!=user_id:
         raise HTTPException(404,"Transaction not found")
+    link=db.scalar(select(CreditCardTransactionLink).where(CreditCardTransactionLink.transaction_id==tx.id))
+    if link:
+        debt=db.get(Debt,link.debt_id)
+        if debt:
+            if link.entry_type=="purchase":
+                debt.outstanding_balance=max(Decimal("0"),Decimal(debt.outstanding_balance)-Decimal(link.amount))
+            elif link.entry_type=="payment":
+                debt.outstanding_balance=Decimal(debt.outstanding_balance)+Decimal(link.amount)
+                debt.status="active"
+            if link.debt_payment_id:
+                payment=db.get(DebtPayment,link.debt_payment_id)
+                if payment:
+                    db.delete(payment)
+        db.delete(link)
     db.delete(tx)
     db.commit()
     return {"ok":True}
@@ -939,7 +1005,7 @@ def summary(
     family_totals=defaultdict(Decimal)
     family_meta={}
     for t in family_items:
-        if t.direction!="debit" or t.txn_type in ("internal_transfer","investment") or not t.user:
+        if t.direction!="debit" or t.txn_type in ("internal_transfer","investment","credit_card_payment") or not t.user:
             continue
         key=f"user:{t.user.id}"
         family_meta[key]={

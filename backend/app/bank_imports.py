@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Account, ImportBatch, Transaction, TransactionSource
+from .models import Account, ImportBatch, ReconciliationItem, Transaction, TransactionSource
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
 from .users import current_user_id
@@ -33,12 +33,22 @@ def _parse(file_name: str, content: bytes, password: str | None = None):
     return rows
 
 def _has_file_source(db: Session, account_id: int, file_hash: str):
-    return db.scalar(
+    transaction_source = db.scalar(
         select(TransactionSource.id)
         .join(Transaction, TransactionSource.transaction_id == Transaction.id)
         .where(
             Transaction.account_id == account_id,
             TransactionSource.external_hash == file_hash,
+        )
+        .limit(1)
+    )
+    if transaction_source:
+        return transaction_source
+    return db.scalar(
+        select(ReconciliationItem.id)
+        .where(
+            ReconciliationItem.account_id == account_id,
+            ReconciliationItem.external_hash == file_hash,
         )
         .limit(1)
     )
@@ -132,7 +142,7 @@ async def commit_bank_statement(
     review = 0
     source_type = _source_type(file_name)
 
-    for row in rows:
+    for row_index, row in enumerate(rows):
         match, method, score, state = _classify(db, account_id, row)
         amount = Decimal(row["amount"])
 
@@ -157,6 +167,26 @@ async def commit_bank_statement(
             continue
 
         if state == "review":
+            db.add(
+                ReconciliationItem(
+                    user_id=user_id,
+                    account_id=account_id,
+                    import_batch_id=batch.id,
+                    candidate_transaction_id=match.id if match else None,
+                    source_row_index=row_index,
+                    source_type=source_type,
+                    source_name=file_name,
+                    external_hash=file_hash,
+                    txn_at=row["txn_at"],
+                    amount=amount,
+                    direction=row["direction"],
+                    description_raw=row["description"],
+                    bank_ref=row.get("bank_ref"),
+                    match_method=method,
+                    match_score=Decimal(str(score)),
+                    status="needs_review",
+                )
+            )
             review += 1
             continue
 

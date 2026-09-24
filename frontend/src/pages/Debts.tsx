@@ -53,10 +53,11 @@ const emptyForm=()=>({
 export default function Debts(){
   const {resolvedMode}=useUI()
   const {familyScope,familyUserId,scopeLabel,linkedUsers}=useFamily()
-  const {auth}=useAppData()
+  const {auth,accounts}=useAppData()
   const navigate=useNavigate()
   const clay=claySx(resolvedMode)
   const canManage=familyScope==='self'&&!familyUserId
+  const bankAccounts=accounts.filter((account:any)=>account.type==='bank')
   const [data,setData]=useState<DebtList>({
     items:[],
     total_outstanding:0,
@@ -72,6 +73,7 @@ export default function Debts(){
   const [editId,setEditId]=useState<number|null>(null)
   const [editForm,setEditForm]=useState(emptyForm())
   const [payment,setPayment]=useState<Record<number,string>>({})
+  const [paymentSource,setPaymentSource]=useState<Record<number,string>>({})
   const [busy,setBusy]=useState('')
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
@@ -190,10 +192,15 @@ export default function Debts(){
     if(!amount)return
     setBusy('payment:'+debt.id);setError('');setNotice('')
     try{
+      const source=paymentSource[debt.id]||(bankAccounts[0]?String(bankAccounts[0].id):'cash')
       await api.addDebtPayment(debt.id,{
         amount,
         paid_at:new Date().toISOString(),
         note:'Recorded in Ledger liability tracker',
+        ...(debt.debt_type==='credit_card'?{
+          payment_method:source==='cash'?'cash':'upi',
+          account_id:source==='cash'?null:Number(source),
+        }:{})
       })
       setPayment(current=>({...current,[debt.id]:''}))
       setNotice('Payment recorded and outstanding balance updated.')
@@ -316,7 +323,7 @@ export default function Debts(){
       rate:110,
       commitment:145,
       due:135,
-      payment:225,
+      payment:350,
       actions:230,
     }
     const fixed=(width:number)=>({width,minWidth:width,maxWidth:width})
@@ -379,8 +386,19 @@ export default function Debts(){
                     value={payment[debt.id]||''}
                     onChange={e=>setPayment(current=>({...current,[debt.id]:e.target.value}))}
                     inputProps={{min:0,step:.01,inputMode:'decimal'}}
-                    sx={{width:110}}
+                    sx={{width:105}}
                   />
+                  {isCard&&<TextField
+                    select
+                    size="small"
+                    label="Pay from"
+                    value={paymentSource[debt.id]||(bankAccounts[0]?String(bankAccounts[0].id):'cash')}
+                    onChange={e=>setPaymentSource(current=>({...current,[debt.id]:String(e.target.value)}))}
+                    sx={{width:145}}
+                  >
+                    {bankAccounts.map((account:any)=><MenuItem key={account.id} value={String(account.id)}>{account.name}</MenuItem>)}
+                    <MenuItem value="cash">Cash in hand</MenuItem>
+                  </TextField>}
                   <Button
                     size="small"
                     variant="contained"

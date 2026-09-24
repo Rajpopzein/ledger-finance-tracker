@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import Account, Category, Debt, DebtPayment, Transaction
+from .models import Account, Category, CreditCardTransactionLink, Debt, DebtPayment, Transaction, TransactionSource
 from .schemas import AICategorizeRequest, DebtCreate, DebtPaymentCreate, DebtUpdate, TransactionCategoryUpdate, TransactionUpdate
 from .services.ai import categorize_transactions, extract_debt_from_document
 from .services.dedupe import fingerprint
@@ -133,7 +133,17 @@ def update_transaction(
     if not tx or tx.user_id != user_id:
         raise HTTPException(404, "Transaction not found")
 
+    link = db.scalar(
+        select(CreditCardTransactionLink).where(
+            CreditCardTransactionLink.transaction_id == tx.id
+        )
+    )
     values = body.model_dump(exclude_unset=True)
+    if link and link.entry_type == "payment" and any(
+        key in values for key in ("amount", "direction", "account_id")
+    ):
+        raise HTTPException(400, "Edit credit-card payments from the liability tracker")
+    old_amount = Decimal(tx.amount)
     if "account_id" in values:
         account_id = values.pop("account_id")
         if account_id is not None:
@@ -161,12 +171,26 @@ def update_transaction(
         if category_was_updated
         else bool(tx.category and tx.category.name == "Investments")
     )
-    tx.txn_type = (
-        "internal_transfer" if tx.txn_type == "internal_transfer"
-        else "income" if tx.direction == "credit"
-        else "investment" if is_investment
-        else "expense"
-    )
+    if link and link.entry_type == "purchase":
+        if tx.direction != "debit":
+            raise HTTPException(400, "Credit-card purchases must remain outgoing transactions")
+        debt = db.get(Debt, link.debt_id)
+        if debt and tx.amount != old_amount:
+            debt.outstanding_balance = max(
+                Decimal("0"),
+                Decimal(debt.outstanding_balance) + Decimal(tx.amount) - old_amount,
+            )
+        link.amount = tx.amount
+        tx.txn_type = "credit_card_purchase"
+    elif link and link.entry_type == "payment":
+        tx.txn_type = "credit_card_payment"
+    else:
+        tx.txn_type = (
+            "internal_transfer" if tx.txn_type == "internal_transfer"
+            else "income" if tx.direction == "credit"
+            else "investment" if is_investment
+            else "expense"
+        )
     tx.fingerprint = fingerprint(
         tx.account_id or 0,
         tx.txn_at,
@@ -189,6 +213,29 @@ def delete_transaction(
     tx = db.get(Transaction, tx_id)
     if not tx or tx.user_id != user_id:
         raise HTTPException(404, "Transaction not found")
+    link = db.scalar(
+        select(CreditCardTransactionLink).where(
+            CreditCardTransactionLink.transaction_id == tx.id
+        )
+    )
+    if link:
+        debt = db.get(Debt, link.debt_id)
+        if debt:
+            if link.entry_type == "purchase":
+                debt.outstanding_balance = max(
+                    Decimal("0"),
+                    Decimal(debt.outstanding_balance) - Decimal(link.amount),
+                )
+            elif link.entry_type == "payment":
+                debt.outstanding_balance = (
+                    Decimal(debt.outstanding_balance) + Decimal(link.amount)
+                )
+                debt.status = "active"
+            if link.debt_payment_id:
+                payment = db.get(DebtPayment, link.debt_payment_id)
+                if payment:
+                    db.delete(payment)
+        db.delete(link)
     db.delete(tx)
     db.commit()
     return {"ok": True}
@@ -425,6 +472,82 @@ def add_debt_payment(
     if debt.outstanding_balance == 0:
         debt.status = "closed"
     db.add(payment)
+    db.flush()
+
+    if debt.debt_type == "credit_card" and body.payment_method:
+        if body.payment_method == "cash":
+            account = db.scalar(
+                select(Account).where(
+                    Account.user_id == user_id,
+                    Account.type == "cash",
+                    Account.is_active == True,
+                )
+            )
+            if not account:
+                account = Account(
+                    user_id=user_id,
+                    name="Cash",
+                    institution="Cash",
+                    type="cash",
+                    is_active=True,
+                )
+                db.add(account)
+                db.flush()
+        else:
+            if body.account_id is None:
+                raise HTTPException(400, "Select the bank account used to pay this card")
+            account = db.get(Account, body.account_id)
+            if (
+                not account
+                or account.user_id != user_id
+                or account.type != "bank"
+                or not account.is_active
+            ):
+                raise HTTPException(400, "Select a valid active bank account")
+
+        category = _category(db, user_id, "EMI & Loans")
+        description = body.note or f"Credit card payment · {debt.lender}"
+        fp = fingerprint(
+            account.id,
+            body.paid_at,
+            body.amount,
+            "debit",
+            description,
+        )
+        tx = Transaction(
+            user_id=user_id,
+            account_id=account.id,
+            category_id=category.id,
+            category_source="manual",
+            txn_at=body.paid_at,
+            amount=body.amount,
+            direction="debit",
+            txn_type="credit_card_payment",
+            payment_method=body.payment_method,
+            merchant=debt.lender,
+            description_raw=description,
+            fingerprint=fp,
+            verification_status="verified",
+        )
+        tx.sources.append(
+            TransactionSource(
+                source_type="manual",
+                source_name="Credit Card Payment",
+            )
+        )
+        db.add(tx)
+        db.flush()
+        db.add(
+            CreditCardTransactionLink(
+                user_id=user_id,
+                transaction_id=tx.id,
+                debt_id=debt.id,
+                debt_payment_id=payment.id,
+                entry_type="payment",
+                amount=body.amount,
+            )
+        )
+
     db.commit()
     db.refresh(debt)
     return _serialize_debt(debt, [payment])

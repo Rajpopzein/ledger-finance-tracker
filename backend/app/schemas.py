@@ -58,6 +58,7 @@ class ManualTransactionCreate(BaseModel):
     direction: str = Field(default="debit", pattern="^(credit|debit)$")
     payment_method: str = Field(default="cash", pattern="^(cash|upi|credit_card)$")
     account_id: int | None = None
+    credit_card_id: int | None = None
     category: str = Field(min_length=1, max_length=80)
     txn_at: datetime
     merchant: str | None = Field(default=None, max_length=160)
@@ -122,6 +123,14 @@ class DebtPaymentCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     paid_at: datetime
     note: str | None = Field(default=None, max_length=255)
+    payment_method: str | None = Field(default=None, pattern="^(cash|upi)$")
+    account_id: int | None = None
+
+class ReconciliationResolve(BaseModel):
+    action: str = Field(pattern="^(merge|keep_both|ignore)$")
+
+class MonthlyCloseCreate(BaseModel):
+    month_key: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 class TransactionUpdate(BaseModel):
