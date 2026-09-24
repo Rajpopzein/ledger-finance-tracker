@@ -159,6 +159,8 @@ export const api={
  balanceHistory:(limit=30)=>req<any>(`/balance/history?limit=${limit}`),
  updateBalance:(body:{bank_balance:number;cash_balance:number;as_of?:string|null})=>req<any>('/balance',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  monthlyCloses:()=>req<any>('/monthly-closes'),
+ prepareMonthlyClose:(monthKey:string)=>req<any>(`/monthly-closes/${monthKey}/prepare`),
+ saveMonthEndBalance:(monthKey:string,body:{bank_balance:number;cash_balance:number})=>req<any>(`/monthly-closes/${monthKey}/balance`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  createMonthlyClose:(monthKey:string)=>req<any>('/monthly-closes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month_key:monthKey})}),
  reconciliation:(status='needs_review')=>req<any>(`/reconciliation?status=${encodeURIComponent(status)}`),
  resolveReconciliation:(id:number,action:'merge'|'keep_both'|'ignore')=>req<any>(`/reconciliation/${id}/resolve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})}),
