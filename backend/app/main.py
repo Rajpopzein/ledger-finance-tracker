@@ -570,8 +570,8 @@ def _create_manual_transaction(
     merchant:str|None,
     note:str|None,
     account_id:int|None,
-    credit_card_id:int|None,
     db:Session,
+    credit_card_id:int|None=None,
 ):
     category=db.scalar(
         select(Category).where(
@@ -729,7 +729,11 @@ def update_transaction(
     if not tx or tx.user_id!=user_id:
         raise HTTPException(404,"Transaction not found")
 
+    link=db.scalar(select(CreditCardTransactionLink).where(CreditCardTransactionLink.transaction_id==tx.id))
     values=body.model_dump(exclude_unset=True)
+    if link and link.entry_type=="payment" and any(key in values for key in ("amount","direction","account_id")):
+        raise HTTPException(400,"Edit credit-card payments from the liability tracker")
+    old_amount=Decimal(tx.amount)
 
     if "account_id" in values:
         account_id=values.pop("account_id")
@@ -774,7 +778,20 @@ def update_transaction(
         if key in values:
             setattr(tx,attr,values[key])
 
-    if old_type in ("income","expense") and "direction" in values:
+    if link and link.entry_type=="purchase":
+        if tx.direction!="debit":
+            raise HTTPException(400,"Credit-card purchases must remain outgoing transactions")
+        debt=db.get(Debt,link.debt_id)
+        if debt and tx.amount!=old_amount:
+            debt.outstanding_balance=max(
+                Decimal("0"),
+                Decimal(debt.outstanding_balance)+Decimal(tx.amount)-old_amount,
+            )
+        link.amount=tx.amount
+        tx.txn_type="credit_card_purchase"
+    elif link and link.entry_type=="payment":
+        tx.txn_type="credit_card_payment"
+    elif old_type in ("income","expense") and "direction" in values:
         tx.txn_type="income" if tx.direction=="credit" else "expense"
 
     tx.fingerprint=fingerprint(
