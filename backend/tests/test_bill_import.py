@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from backend.app.bills import bill_commit
 from backend.app.db import Base
-from backend.app.models import Account, Debt, Transaction, TransactionSource, User
+from backend.app.main import _current_available_balance
+from backend.app.models import Account, AvailableBalance, Debt, Transaction, TransactionSource, User
 from backend.app.schemas import BillExpenseCreate
 
 
@@ -164,3 +165,57 @@ def test_bank_bill_uses_selected_bank_account():
     assert tx.payment_method == "bank"
     assert tx.account_id == bank.id
     assert tx.txn_type == "expense"
+
+
+def test_upi_bill_uses_paid_at_to_reduce_current_available_balance():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+
+    now = datetime.now(timezone.utc)
+    db.add(AvailableBalance(
+        user_id=user.id,
+        bank_balance=Decimal("5000.00"),
+        cash_balance=Decimal("250.00"),
+        as_of=now.replace(microsecond=0),
+    ))
+    db.commit()
+
+    paid_at = now.replace(microsecond=0)
+    paid_at = paid_at.replace(second=min(59, paid_at.second + 1))
+
+    result = bill_commit(
+        BillExpenseCreate(
+            amount=Decimal("800.00"),
+            payment_method="upi",
+            account_id=bank.id,
+            category="Bills & Subscriptions",
+            txn_at=datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc),
+            paid_at=paid_at,
+            merchant="Electricity Board",
+            source_file_name="electricity.pdf",
+            source_hash="e" * 64,
+        ),
+        _request(user.id),
+        db,
+    )
+
+    tx = db.get(Transaction, result["transaction_id"])
+    assert tx.txn_at.replace(tzinfo=timezone.utc) == paid_at
+    assert result["bill_date"] == "2026-09-01"
+
+    state = _current_available_balance(db, user.id)
+    assert state is not None
+    assert state["bank_balance"] == Decimal("4200.00")
+    assert state["cash_balance"] == Decimal("250.00")
+    assert state["total"] == Decimal("4450.00")

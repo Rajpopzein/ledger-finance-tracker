@@ -195,7 +195,11 @@ def bill_commit(
     else:
         raise HTTPException(400, "Unsupported payment method")
 
-    txn_at = body.txn_at
+    bill_at = body.txn_at
+    if bill_at.tzinfo is None:
+        bill_at = bill_at.replace(tzinfo=timezone.utc)
+
+    txn_at = body.paid_at or bill_at
     if txn_at.tzinfo is None:
         txn_at = txn_at.replace(tzinfo=timezone.utc)
 
@@ -215,7 +219,7 @@ def bill_commit(
         if not has_bill_source:
             existing.sources.append(TransactionSource(
                 source_type="bill",
-                source_name=f"Bill · {(body.source_file_name or 'uploaded bill')[:220]}",
+                source_name=f"Bill · {bill_at.date().isoformat()} · {(body.source_file_name or 'uploaded bill')[:200]}",
                 external_hash=body.source_hash,
             ))
             db.commit()
@@ -244,13 +248,13 @@ def bill_commit(
         txn_type=txn_type,
         payment_method=body.payment_method,
         merchant=body.merchant.strip(),
-        description_raw=body.note.strip() if body.note else "Added from uploaded bill",
+        description_raw=body.note.strip() if body.note else f"Added from uploaded bill · Bill date {bill_at.date().isoformat()}",
         fingerprint=fp,
         verification_status="verified",
     )
     tx.sources.append(TransactionSource(
         source_type="bill",
-        source_name=f"Bill · {(body.source_file_name or 'uploaded bill')[:220]}",
+        source_name=f"Bill · {bill_at.date().isoformat()} · {(body.source_file_name or 'uploaded bill')[:200]}",
         external_hash=body.source_hash,
     ))
     db.add(tx)
@@ -275,5 +279,7 @@ def bill_commit(
         "amount": float(tx.amount),
         "merchant": tx.merchant,
         "category": category.name,
+        "bill_date": bill_at.date().isoformat(),
+        "paid_at": txn_at.isoformat(),
         "message": "Expense added from bill.",
     }
