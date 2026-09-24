@@ -295,6 +295,18 @@ class Commitment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     category: Mapped[Category | None] = relationship()
 
+
+class PredictionDismissal(Base):
+    __tablename__ = "prediction_dismissals"
+    __table_args__ = (
+        UniqueConstraint("user_id", "prediction_key", name="uq_prediction_dismissal_user_key"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    prediction_key: Mapped[str] = mapped_column(String(160), index=True)
+    title: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class Debt(Base):
     __tablename__ = "debts"
     id: Mapped[int] = mapped_column(primary_key=True)
