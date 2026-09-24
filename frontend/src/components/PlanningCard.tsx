@@ -36,8 +36,9 @@ const nextMonthDate=()=>{
   return d.toISOString().slice(0,10)
 }
 
-export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refreshKey?:string}){
-  const {categories}=useAppData()
+export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'dark';refreshKey?:string;onChanged?:()=>void|Promise<void>}){
+  const {categories,accounts}=useAppData()
+  const bankAccounts=accounts.filter((account:any)=>account.type==='bank'&&account.is_active!==false)
   const clay=claySx(mode)
   const [data,setData]=useState<any>(null)
   const [loading,setLoading]=useState(true)
@@ -45,6 +46,8 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
   const [notice,setNotice]=useState('')
   const [budgetOpen,setBudgetOpen]=useState(false)
   const [commitmentOpen,setCommitmentOpen]=useState(false)
+  const [paymentItem,setPaymentItem]=useState<any>(null)
+  const [paymentForm,setPaymentForm]=useState({source:'',paid_at:new Date().toISOString().slice(0,16)})
   const [budgetForm,setBudgetForm]=useState({category:'Groceries',monthly_limit:''})
   const [commitmentForm,setCommitmentForm]=useState({
     title:'',
@@ -142,14 +145,32 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
     }
   }
 
-  async function completeCommitment(id:number){
+  function startCommitmentPayment(item:any){
+    setError('');setNotice('')
+    setPaymentItem(item)
+    setPaymentForm({
+      source:bankAccounts[0]?String(bankAccounts[0].id):'cash',
+      paid_at:new Date().toISOString().slice(0,16),
+    })
+  }
+
+  async function completeCommitment(){
+    if(!paymentItem||!paymentForm.source||!paymentForm.paid_at)return
+    const id=Number(paymentItem.id)
+    const isCash=paymentForm.source==='cash'
     setBusy('commitment-complete:'+id);setError('');setNotice('')
     try{
-      await api.completeCommitment(id)
-      setNotice('Commitment marked paid.')
+      await api.completeCommitment(id,{
+        payment_method:isCash?'cash':'upi',
+        account_id:isCash?null:Number(paymentForm.source),
+        paid_at:new Date(paymentForm.paid_at).toISOString(),
+      })
+      setPaymentItem(null)
+      setNotice('Payment recorded and available balance updated.')
       await load()
+      await onChanged?.()
     }catch(e:any){
-      setError(e.message||'Could not complete commitment.')
+      setError(e.message||'Could not record this payment.')
     }finally{
       setBusy('')
     }
@@ -266,7 +287,7 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
               </Box>
               <Typography variant="body2" fontWeight={850} textAlign="right">{money(item.amount)}</Typography>
               <Stack direction="row" spacing={.25} justifyContent="flex-end" sx={{gridColumn:{xs:'1 / -1',sm:'auto'}}}>
-                {item.source==='manual'&&!item.future_occurrence&&<Button size="small" variant="outlined" disabled={busy==='commitment-complete:'+item.id} onClick={()=>completeCommitment(Number(item.id))}>Paid</Button>}
+                {item.source==='manual'&&!item.future_occurrence&&<Button size="small" variant="outlined" disabled={busy==='commitment-complete:'+item.id} onClick={()=>startCommitmentPayment(item)}>Paid</Button>}
                 {item.source==='manual'&&!item.future_occurrence&&<Button size="small" color="error" disabled={busy==='commitment-delete:'+item.id} onClick={()=>removeCommitment(Number(item.id))}><DeleteOutlineRoundedIcon fontSize="small"/></Button>}
                 {(item.source==='recurring'||item.source==='ai_predicted')&&!item.future_occurrence&&<Button size="small" color="error" disabled={busy==='prediction-delete:'+item.id} onClick={()=>dismissPrediction(String(item.id))}><DeleteOutlineRoundedIcon fontSize="small"/></Button>}
               </Stack>
@@ -329,6 +350,51 @@ export default function PlanningCard({mode,refreshKey}:{mode:'light'|'dark';refr
         <Button onClick={()=>setBudgetOpen(false)} disabled={busy==='budget'}>Cancel</Button>
         <Button variant="contained" onClick={saveBudget} disabled={busy==='budget'||!Number(budgetForm.monthly_limit)}>
           {busy==='budget'?'Saving…':'Save budget'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    <Dialog open={Boolean(paymentItem)} onClose={busy.startsWith('commitment-complete:')?undefined:()=>setPaymentItem(null)} fullWidth maxWidth="xs">
+      <DialogTitle>Record payment</DialogTitle>
+      <DialogContent>
+        {paymentItem&&<Stack spacing={1.5} sx={{pt:.5}}>
+          <Box>
+            <Typography variant="body2" fontWeight={850}>{paymentItem.title}</Typography>
+            <Typography variant="caption" color="text.secondary">{money(paymentItem.amount)}</Typography>
+          </Box>
+          <FormControl size="small">
+            <InputLabel>Paid from</InputLabel>
+            <Select
+              label="Paid from"
+              value={paymentForm.source}
+              onChange={e=>setPaymentForm({...paymentForm,source:String(e.target.value)})}
+            >
+              {bankAccounts.map((account:any)=><MenuItem key={account.id} value={String(account.id)}>
+                UPI · {account.name}
+              </MenuItem>)}
+              <MenuItem value="cash">Cash in hand</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField
+            label="Paid at"
+            type="datetime-local"
+            InputLabelProps={{shrink:true}}
+            value={paymentForm.paid_at}
+            onChange={e=>setPaymentForm({...paymentForm,paid_at:e.target.value})}
+          />
+          <Alert severity="info">
+            UPI reduces the selected bank balance. Cash reduces cash in hand. The payment is also added to Transactions.
+          </Alert>
+        </Stack>}
+      </DialogContent>
+      <DialogActions sx={{p:2}}>
+        <Button onClick={()=>setPaymentItem(null)} disabled={busy.startsWith('commitment-complete:')}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={completeCommitment}
+          disabled={!paymentItem||!paymentForm.source||!paymentForm.paid_at||busy.startsWith('commitment-complete:')}
+        >
+          {busy.startsWith('commitment-complete:')?'Saving…':'Record payment'}
         </Button>
       </DialogActions>
     </Dialog>
