@@ -429,6 +429,32 @@ def _filtered_stmt(
         stmt=stmt.where(Transaction.user_id.in_(user_ids))
     return stmt
 
+def _spending_breakdown(items):
+    spending=[
+        t for t in items
+        if t.direction=="debit" and t.txn_type not in ("internal_transfer","investment")
+    ]
+    credit_card=[
+        t for t in spending
+        if t.txn_type=="credit_card_purchase" or t.payment_method=="credit_card"
+    ]
+    credit_card_ids={t.id for t in credit_card}
+    liquid=[t for t in spending if t.id not in credit_card_ids]
+    categories=defaultdict(Decimal)
+    for t in spending:
+        categories[t.category.name if t.category else "Uncategorized"]+=t.amount
+    top_name=None
+    top_amount=Decimal("0")
+    if categories:
+        top_name,top_amount=max(categories.items(),key=lambda item:item[1])
+    return {
+        "total":sum((t.amount for t in spending),Decimal("0")),
+        "liquid":sum((t.amount for t in liquid),Decimal("0")),
+        "credit_card":sum((t.amount for t in credit_card),Decimal("0")),
+        "top_category":top_name,
+        "top_category_amount":top_amount,
+    }
+
 def _scope_user_ids(
     request:Request,
     db:Session,
@@ -828,6 +854,42 @@ def summary(
         if balance_state:
             liquid_balance=balance_state["total"]
 
+    report_day=to_date or datetime.now(INDIA_TZ).date()
+    report_month_start=date(report_day.year,report_day.month,1)
+    report_next_month=(
+        date(report_day.year+1,1,1)
+        if report_day.month==12
+        else date(report_day.year,report_day.month+1,1)
+    )
+    report_previous_month_end=report_month_start-timedelta(days=1)
+    report_previous_month_start=date(
+        report_previous_month_end.year,
+        report_previous_month_end.month,
+        1,
+    )
+    report_month_items=db.scalars(
+        _filtered_stmt(
+            report_month_start,
+            report_next_month-timedelta(days=1),
+            transaction_user_ids,
+        ).where(Transaction.excluded_from_analytics==False)
+    ).all()
+    report_previous_month_items=db.scalars(
+        _filtered_stmt(
+            report_previous_month_start,
+            report_previous_month_end,
+            transaction_user_ids,
+        ).where(Transaction.excluded_from_analytics==False)
+    ).all()
+    month_spending=_spending_breakdown(report_month_items)
+    previous_month_spending=_spending_breakdown(report_previous_month_items)
+    month_change=month_spending["total"]-previous_month_spending["total"]
+    month_change_percent=(
+        (month_change/previous_month_spending["total"])*Decimal("100")
+        if previous_month_spending["total"]>0
+        else None
+    )
+
     net_worth=liquid_balance+investment_value-debt_outstanding
     verified=sum(1 for t in items if t.verification_status in ("verified","manual"))
     review=sum(1 for t in items if t.verification_status not in ("verified","manual"))
@@ -913,6 +975,17 @@ def summary(
         "verified":verified,
         "total":len(items),
         "needs_review":review,
+        "monthly_spending":{
+            "label":report_month_start.strftime("%B %Y"),
+            "total":float(month_spending["total"]),
+            "liquid":float(month_spending["liquid"]),
+            "credit_card":float(month_spending["credit_card"]),
+            "top_category":month_spending["top_category"],
+            "top_category_amount":float(month_spending["top_category_amount"]),
+            "previous_month_total":float(previous_month_spending["total"]),
+            "change_amount":float(month_change),
+            "change_percent":float(month_change_percent) if month_change_percent is not None else None,
+        },
         "categories":[{"name":k,"amount":float(v)} for k,v in sorted(cats.items(),key=lambda x:x[1],reverse=True)],
         "cashflow":months,
         "family_spending":family_spending,
