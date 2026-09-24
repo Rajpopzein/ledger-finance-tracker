@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from backend.app.db import Base
-from backend.app.main import _create_manual_transaction, _current_available_balance, app
+from backend.app.main import _create_manual_transaction, _current_available_balance, _spending_breakdown, app
 from backend.app.models import Account, AvailableBalance, Transaction, User
 
 
@@ -228,3 +228,77 @@ def test_balance_and_verify_routes_are_available():
     assert balance_get is not None
     assert balance_put is not None
     assert "POST" in verify.methods
+
+
+def test_spending_breakdown_separates_liquid_and_credit_card():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("800.00"),
+        direction="debit",
+        payment_method="upi",
+        category_name="Groceries",
+        txn_at=datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc),
+        merchant="Market",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("200.00"),
+        direction="debit",
+        payment_method="cash",
+        category_name="Groceries",
+        txn_at=datetime(2026, 9, 24, 9, 30, tzinfo=timezone.utc),
+        merchant="Market",
+        note=None,
+        account_id=None,
+        db=db,
+    )
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("500.00"),
+        direction="debit",
+        payment_method="credit_card",
+        category_name="Shopping",
+        txn_at=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
+        merchant="Store",
+        note=None,
+        account_id=None,
+        db=db,
+    )
+    _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("1000.00"),
+        direction="debit",
+        payment_method="upi",
+        category_name="Investments",
+        txn_at=datetime(2026, 9, 24, 10, 30, tzinfo=timezone.utc),
+        merchant="Broker",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+
+    rows = db.scalars(select(Transaction).where(Transaction.user_id == user.id)).all()
+    result = _spending_breakdown(rows)
+
+    assert result["total"] == Decimal("1500.00")
+    assert result["liquid"] == Decimal("1000.00")
+    assert result["credit_card"] == Decimal("500.00")
+    assert result["top_category"] == "Groceries"
+    assert result["top_category_amount"] == Decimal("1000.00")
