@@ -790,7 +790,7 @@ def summary(
         "new_income":float(new_income),
         "income":float(income),
         "spent":float(spent),
-        "available":float(max(Decimal("0"),new_income-spent)),
+        "available":float(max(Decimal("0"),liquid_balance)),
         "liquid_balance":float(liquid_balance),
         "investment_value":float(investment_value),
         "debt_outstanding":float(debt_outstanding),
