@@ -16,7 +16,7 @@ from .models import (
     Transaction,
     TransactionSource,
 )
-from .schemas import MonthlyCloseCreate, ReconciliationResolve
+from .schemas import MonthEndBalanceUpdate, MonthlyCloseCreate, ReconciliationResolve
 from .services.dedupe import fingerprint
 from .users import current_user_id
 
@@ -151,29 +151,28 @@ def monthly_closes(request: Request, db: Session = Depends(get_db)):
     return {"items": [_serialize_close(row) for row in rows]}
 
 
-@router.post("/api/monthly-closes")
-def create_monthly_close(
-    body: MonthlyCloseCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    user_id = current_user_id(request)
-    existing = db.scalar(
-        select(MonthlyClose).where(
-            MonthlyClose.user_id == user_id,
-            MonthlyClose.month_key == body.month_key,
-        )
-    )
-    if existing:
-        return {"already_closed": True, "close": _serialize_close(existing)}
+def _month_end_at(month_key: str):
+    _, _, _, end = _month_bounds(month_key)
+    return end - timedelta(microseconds=1)
 
-    start_date, next_date, start, end = _month_bounds(body.month_key)
-    closing = _balance_at(db, user_id, end - timedelta(microseconds=1))
-    if not closing:
-        raise HTTPException(
-            400,
-            "No balance baseline exists for this month. Set your bank and cash balance before closing the month.",
+
+def _month_end_snapshot(db: Session, user_id: int, month_key: str):
+    at = _month_end_at(month_key)
+    return db.scalar(
+        select(BalanceSnapshot)
+        .where(
+            BalanceSnapshot.user_id == user_id,
+            BalanceSnapshot.source == "month_end",
+            BalanceSnapshot.as_of == at,
         )
+        .order_by(BalanceSnapshot.id.desc())
+        .limit(1)
+    )
+
+
+def _month_close_values(db: Session, user_id: int, month_key: str):
+    start_date, _, start, end = _month_bounds(month_key)
+    closing = _balance_at(db, user_id, end - timedelta(microseconds=1))
 
     prev_date = start_date - timedelta(days=1)
     prev_key = f"{prev_date.year:04d}-{prev_date.month:02d}"
@@ -183,11 +182,7 @@ def create_monthly_close(
             MonthlyClose.month_key == prev_key,
         )
     )
-    opening = (
-        Decimal(previous_close.closing_balance)
-        if previous_close
-        else None
-    )
+    opening = Decimal(previous_close.closing_balance) if previous_close else None
     if opening is None:
         opening_state = _balance_at(db, user_id, start - timedelta(microseconds=1))
         opening = opening_state["total"] if opening_state else None
@@ -243,19 +238,184 @@ def create_monthly_close(
     )
     savings = income - total_spending - investments
 
+    review_transactions = [
+        tx for tx in txs
+        if tx.verification_status not in ("verified", "manual")
+    ]
+    reconciliation_review = db.scalars(
+        select(ReconciliationItem).where(
+            ReconciliationItem.user_id == user_id,
+            ReconciliationItem.status == "needs_review",
+            ReconciliationItem.txn_at >= start,
+            ReconciliationItem.txn_at < end,
+        )
+    ).all()
+
+    return {
+        "opening_balance": opening,
+        "closing": closing,
+        "income": income,
+        "liquid_spending": liquid_spending,
+        "credit_card_spending": card_spending,
+        "investments": investments,
+        "debt_payments": debt_payments,
+        "savings": savings,
+        "review_transactions": len(review_transactions),
+        "reconciliation_review": len(reconciliation_review),
+    }
+
+
+@router.get("/api/monthly-closes/{month_key}/prepare")
+def prepare_monthly_close(
+    month_key: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    try:
+        _month_bounds(month_key)
+    except Exception:
+        raise HTTPException(400, "Month must use YYYY-MM format")
+
+    existing = db.scalar(
+        select(MonthlyClose).where(
+            MonthlyClose.user_id == user_id,
+            MonthlyClose.month_key == month_key,
+        )
+    )
+    month_end = _month_end_snapshot(db, user_id, month_key)
+    values = _month_close_values(db, user_id, month_key)
+    closing = values["closing"]
+
+    return {
+        "month_key": month_key,
+        "already_closed": bool(existing),
+        "close": _serialize_close(existing) if existing else None,
+        "month_end_balance_confirmed": bool(month_end),
+        "month_end_balance": (
+            {
+                "bank_balance": float(month_end.bank_balance),
+                "cash_balance": float(month_end.cash_balance),
+                "total": float(month_end.bank_balance + month_end.cash_balance),
+                "as_of": month_end.as_of.isoformat(),
+            }
+            if month_end
+            else (
+                {
+                    "bank_balance": float(closing["bank_balance"]),
+                    "cash_balance": float(closing["cash_balance"]),
+                    "total": float(closing["total"]),
+                    "as_of": _month_end_at(month_key).isoformat(),
+                }
+                if closing
+                else None
+            )
+        ),
+        "review_transactions": values["review_transactions"],
+        "reconciliation_review": values["reconciliation_review"],
+        "summary": {
+            "opening_balance": float(values["opening_balance"]) if values["opening_balance"] is not None else None,
+            "income": float(values["income"]),
+            "liquid_spending": float(values["liquid_spending"]),
+            "credit_card_spending": float(values["credit_card_spending"]),
+            "investments": float(values["investments"]),
+            "debt_payments": float(values["debt_payments"]),
+            "savings": float(values["savings"]),
+            "closing_balance": float(closing["total"]) if closing else None,
+        },
+    }
+
+
+@router.put("/api/monthly-closes/{month_key}/balance")
+def save_month_end_balance(
+    month_key: str,
+    body: MonthEndBalanceUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    existing_close = db.scalar(
+        select(MonthlyClose).where(
+            MonthlyClose.user_id == user_id,
+            MonthlyClose.month_key == month_key,
+        )
+    )
+    if existing_close:
+        raise HTTPException(400, "This month is already closed")
+
+    try:
+        at = _month_end_at(month_key)
+    except Exception:
+        raise HTTPException(400, "Month must use YYYY-MM format")
+
+    snapshot = _month_end_snapshot(db, user_id, month_key)
+    if snapshot:
+        snapshot.bank_balance = body.bank_balance
+        snapshot.cash_balance = body.cash_balance
+    else:
+        snapshot = BalanceSnapshot(
+            user_id=user_id,
+            bank_balance=body.bank_balance,
+            cash_balance=body.cash_balance,
+            as_of=at,
+            source="month_end",
+        )
+        db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return {
+        "month_key": month_key,
+        "bank_balance": float(snapshot.bank_balance),
+        "cash_balance": float(snapshot.cash_balance),
+        "total": float(snapshot.bank_balance + snapshot.cash_balance),
+        "as_of": snapshot.as_of.isoformat(),
+    }
+
+
+@router.post("/api/monthly-closes")
+def create_monthly_close(
+    body: MonthlyCloseCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    existing = db.scalar(
+        select(MonthlyClose).where(
+            MonthlyClose.user_id == user_id,
+            MonthlyClose.month_key == body.month_key,
+        )
+    )
+    if existing:
+        return {"already_closed": True, "close": _serialize_close(existing)}
+
+    month_end = _month_end_snapshot(db, user_id, body.month_key)
+    if not month_end:
+        raise HTTPException(
+            400,
+            "Enter and confirm the month-end bank and cash balances before closing the month.",
+        )
+
+    values = _month_close_values(db, user_id, body.month_key)
+    closing = values["closing"]
+    if not closing:
+        raise HTTPException(
+            400,
+            "No balance baseline exists for this month. Enter the month-end bank and cash balances first.",
+        )
+
     row = MonthlyClose(
         user_id=user_id,
         month_key=body.month_key,
-        opening_balance=opening,
+        opening_balance=values["opening_balance"],
         closing_bank_balance=closing["bank_balance"],
         closing_cash_balance=closing["cash_balance"],
         closing_balance=closing["total"],
-        income=income,
-        liquid_spending=liquid_spending,
-        credit_card_spending=card_spending,
-        investments=investments,
-        debt_payments=debt_payments,
-        savings=savings,
+        income=values["income"],
+        liquid_spending=values["liquid_spending"],
+        credit_card_spending=values["credit_card_spending"],
+        investments=values["investments"],
+        debt_payments=values["debt_payments"],
+        savings=values["savings"],
     )
     db.add(row)
     db.commit()
