@@ -679,12 +679,24 @@ def planning_summary(
         if not any(_same_commitment(candidate, existing) for existing in upcoming):
             upcoming.append(candidate)
 
-    # Expand recurring manual/debt/predicted commitments across the selected planning horizon.
+    # Expand recurring commitments only from the current relevant occurrence.
+    # Imported debts can carry an old next_due_date; never turn every missed historical
+    # month into a separate future-planning commitment.
     expanded = []
     for item in upcoming:
         due = datetime.fromisoformat(item["next_due_date"])
+        is_recurring = item.get("recurrence") in ("monthly", "debt") or item.get("source") in ("loan", "credit_card", "recurring", "ai_predicted")
+        if is_recurring and due < now:
+            while due < now:
+                due = _add_months(due)
+            item = dict(item)
+            item["next_due_date"] = due.isoformat()
+            item["overdue"] = False
+            item["rolled_forward"] = True
+        if due > horizon:
+            continue
         expanded.append(item)
-        if item.get("recurrence") in ("monthly", "debt") or item.get("source") in ("loan", "credit_card", "recurring", "ai_predicted"):
+        if is_recurring:
             next_due = _add_months(due)
             occurrence = 2
             while next_due <= horizon:
