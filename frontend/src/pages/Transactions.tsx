@@ -35,6 +35,7 @@ import QuickCash from '../components/QuickCash'
 
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(n)
 const upiLabel=(t:Tx)=>t.sources.find(s=>s.type==='upi_app')?.name
+const verificationLabel=(status:string)=>status==='verified'||status==='manual'?'Verified':'Needs review'
 const DESKTOP_TRANSACTION_COLUMNS='360px 190px 140px 160px 40px'
 const DESKTOP_TRANSACTION_MIN_WIDTH=930
 const localDateTime=(value:string)=>{
@@ -54,6 +55,7 @@ export default function Transactions(){
   const [toDate,setToDate]=useState(period.to||'')
   const [accountId,setAccountId]=useState('')
   const [direction,setDirection]=useState('')
+  const [status,setStatus]=useState(()=>new URLSearchParams(window.location.hash.split('?')[1]||'').get('status')==='review'?'review':'')
   const [data,setData]=useState<TransactionPage>({items:[],page:1,page_size:25,total:0,pages:1})
   const [expandedId,setExpandedId]=useState<number|null>(null)
   const [editingId,setEditingId]=useState<number|null>(null)
@@ -89,6 +91,7 @@ export default function Transactions(){
         familyUserId,
         accountId:accountId?Number(accountId):undefined,
         direction:direction==='credit'||direction==='debit'?direction:undefined,
+        status:status||undefined,
         page,
         pageSize,
       })
@@ -105,7 +108,7 @@ export default function Transactions(){
   useEffect(()=>{
     const timer=setTimeout(load,220)
     return()=>clearTimeout(timer)
-  },[q,fromDate,toDate,accountId,direction,page,pageSize,familyScope,familyUserId])
+  },[q,fromDate,toDate,accountId,direction,status,page,pageSize,familyScope,familyUserId])
 
   async function categorizePage(){
     const ids=data.items.map(x=>x.id)
@@ -188,6 +191,19 @@ export default function Transactions(){
     }
   }
 
+  async function verifyTransaction(tx:Tx){
+    setBusy('verify:'+tx.id);setError('');setNotice('')
+    try{
+      await api.verifyTransaction(tx.id)
+      setNotice('Transaction verified.')
+      await load()
+    }catch(e:any){
+      setError(e.message||'Could not verify transaction.')
+    }finally{
+      setBusy('')
+    }
+  }
+
   async function removeTransaction(tx:Tx){
     if(!window.confirm('Delete this transaction from Ledger?'))return
     setBusy('delete:'+tx.id);setError('');setNotice('')
@@ -229,7 +245,7 @@ export default function Transactions(){
     <Paper sx={{...clay,p:{xs:1.15,sm:1.5}}}>
       <Box sx={{
         display:'grid',
-        gridTemplateColumns:{xs:'1fr',sm:'minmax(220px,1.4fr) repeat(2,minmax(140px,.7fr))',lg:'minmax(220px,1.4fr) 190px 150px 150px 140px'},
+        gridTemplateColumns:{xs:'1fr',sm:'repeat(2,minmax(0,1fr))',lg:'minmax(220px,1.4fr) 180px 150px 150px 130px 150px'},
         gap:1.25,
         alignItems:'start',
       }}>
@@ -257,6 +273,15 @@ export default function Transactions(){
             <MenuItem value="">All</MenuItem>
             <MenuItem value="debit">Outgoing</MenuItem>
             <MenuItem value="credit">Incoming</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl size="small">
+          <InputLabel>Verification</InputLabel>
+          <Select label="Verification" value={status} onChange={e=>{setStatus(String(e.target.value));setPage(1)}}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="review">Needs review</MenuItem>
+            <MenuItem value="verified">Verified</MenuItem>
           </Select>
         </FormControl>
       </Box>
@@ -337,7 +362,7 @@ export default function Transactions(){
 
             <Box sx={{display:{xs:'none',sm:'block'}}}>
               <Typography variant="body2">{new Date(t.txn_at).toLocaleDateString('en-IN')}</Typography>
-              <Typography variant="caption" color="text.secondary">{t.verification_status.replace('_',' ')}</Typography>
+              <Typography variant="caption" color={verificationLabel(t.verification_status)==='Needs review'?'warning.main':'text.secondary'}>{verificationLabel(t.verification_status)}</Typography>
             </Box>
 
             <Stack direction="row" spacing={0.35} alignItems="flex-start" justifyContent="flex-end">
@@ -399,7 +424,7 @@ export default function Transactions(){
                   </Box>
                   <Box><Typography variant="caption" color="text.secondary">Account</Typography><Typography variant="body2" sx={{fontWeight:700,overflowWrap:'anywhere'}}>{t.account}</Typography></Box>
                   <Box><Typography variant="caption" color="text.secondary">User</Typography><Typography variant="body2" sx={{fontWeight:700}}>{t.user?.name||'Unknown'}</Typography></Box>
-                  <Box><Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2" sx={{fontWeight:700}}>{t.verification_status.replace('_',' ')}</Typography></Box>
+                  <Box><Typography variant="caption" color="text.secondary">Status</Typography><Typography variant="body2" sx={{fontWeight:700}}>{verificationLabel(t.verification_status)}</Typography></Box>
                 </Box>
 
                 {t.category_source==='ai'&&<Alert severity="info" sx={{mt:1}}>This category was selected by AI.</Alert>}
@@ -419,7 +444,15 @@ export default function Transactions(){
                   <Typography variant="body2" sx={{mt:.45,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{t.description}</Typography>
                 </>}
 
-                {canManage&&<Stack direction="row" spacing={1} sx={{mt:1.25}}>
+                {canManage&&<Stack direction="row" spacing={1} sx={{mt:1.25,flexWrap:'wrap'}}>
+                  {verificationLabel(t.verification_status)==='Needs review'&&<Button
+                    size="small"
+                    variant="contained"
+                    disabled={busy==='verify:'+t.id}
+                    onClick={()=>verifyTransaction(t)}
+                  >
+                    {busy==='verify:'+t.id?'Verifying…':'Verify'}
+                  </Button>}
                   <Button size="small" startIcon={<EditRoundedIcon/>} onClick={()=>startEdit(t)}>Edit</Button>
                   <Button size="small" color="error" startIcon={<DeleteOutlineRoundedIcon/>} disabled={busy==='delete:'+t.id} onClick={()=>removeTransaction(t)}>Delete</Button>
                 </Stack>}
