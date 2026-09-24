@@ -100,6 +100,36 @@ class AvailableBalance(Base):
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class BalanceSnapshot(Base):
+    __tablename__ = "balance_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    bank_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    cash_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    source: Mapped[str] = mapped_column(String(30), default="manual")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+class MonthlyClose(Base):
+    __tablename__ = "monthly_closes"
+    __table_args__ = (
+        UniqueConstraint("user_id", "month_key", name="uq_monthly_close_user_month"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    month_key: Mapped[str] = mapped_column(String(7), index=True)
+    opening_balance: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    closing_bank_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    closing_cash_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    closing_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    income: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    liquid_spending: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    credit_card_spending: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    investments: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    debt_payments: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    savings: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class Category(Base):
     __tablename__ = "categories"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_category_user_name"),)
@@ -135,6 +165,17 @@ class Transaction(Base):
     category: Mapped[Category | None] = relationship(foreign_keys=[category_id])
     sources: Mapped[list["TransactionSource"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
 
+class CreditCardTransactionLink(Base):
+    __tablename__ = "credit_card_transaction_links"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), unique=True, index=True)
+    debt_id: Mapped[int] = mapped_column(ForeignKey("debts.id", ondelete="CASCADE"), index=True)
+    debt_payment_id: Mapped[int | None] = mapped_column(ForeignKey("debt_payments.id", ondelete="SET NULL"), nullable=True, index=True)
+    entry_type: Mapped[str] = mapped_column(String(20))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class TransactionSource(Base):
     __tablename__ = "transaction_sources"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -163,6 +204,32 @@ class ImportPreview(Base):
     file_hash: Mapped[str] = mapped_column(String(64), index=True)
     payload_json: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+class ReconciliationItem(Base):
+    __tablename__ = "reconciliation_items"
+    __table_args__ = (
+        UniqueConstraint("import_batch_id", "source_row_index", name="uq_reconciliation_batch_row"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    import_batch_id: Mapped[int] = mapped_column(ForeignKey("import_batches.id", ondelete="CASCADE"), index=True)
+    candidate_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True, index=True)
+    source_row_index: Mapped[int] = mapped_column()
+    source_type: Mapped[str] = mapped_column(String(30))
+    source_name: Mapped[str] = mapped_column(String(255))
+    external_hash: Mapped[str] = mapped_column(String(64), index=True)
+    txn_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    direction: Mapped[str] = mapped_column(String(10))
+    description_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bank_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    match_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    match_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="needs_review", index=True)
+    resolution: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class AISetting(Base):
     __tablename__ = "ai_settings"
