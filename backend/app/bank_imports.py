@@ -54,7 +54,7 @@ def _classify(db: Session, account_id: int, row):
         bank_ref=row.get("bank_ref"),
     )
 
-    if match and method in ("upi_ref", "bank_ref", "fingerprint"):
+    if match and method in ("upi_ref", "bank_ref", "fingerprint", "manual_amount_date"):
         state = "existing" if match.verification_status == "verified" else "matched"
     elif match:
         state = "review"
