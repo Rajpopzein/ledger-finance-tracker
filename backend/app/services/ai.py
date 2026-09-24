@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 from decimal import Decimal
