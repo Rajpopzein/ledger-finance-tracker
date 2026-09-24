@@ -10,8 +10,6 @@ import {
   InputAdornment,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   Switch,
   Typography,
@@ -23,6 +21,7 @@ import {useFamily} from '../family'
 import {claySx,useUI} from '../ui'
 import Settings from './Settings'
 import ShortcutsSetup from '../components/ShortcutsSetup'
+import SectionNav from '../components/SectionNav'
 
 type ProfileTab='account'|'family'|'shortcuts'|'settings'
 
@@ -160,29 +159,17 @@ export default function Profile(){
       </Typography>
     </Box>
 
-    <Paper sx={{...clay,p:.5,overflow:'hidden'}}>
-      <Tabs
-        value={tab}
-        onChange={(_,value)=>setSearchParams({tab:value})}
-        variant="scrollable"
-        scrollButtons={false}
-        allowScrollButtonsMobile
-        aria-label="Profile sections"
-        sx={{
-          minHeight:44,
-          '& .MuiTab-root':{
-            minHeight:44,
-            px:{xs:.75,sm:1.5},
-            fontSize:{xs:12,sm:13},
-          }
-        }}
-      >
-        <Tab value="account" label="Account"/>
-        <Tab value="family" label="Family"/>
-        <Tab value="shortcuts" label="Shortcuts"/>
-        <Tab value="settings" label="Settings"/>
-      </Tabs>
-    </Paper>
+    <SectionNav
+      value={tab}
+      onChange={value=>setSearchParams({tab:value})}
+      ariaLabel="Profile sections"
+      items={[
+        {value:'account',label:'Account'},
+        {value:'family',label:'Family'},
+        {value:'shortcuts',label:'Shortcuts'},
+        {value:'settings',label:'Settings'},
+      ]}
+    />
 
     {error&&<Alert severity="error">{error}</Alert>}
     {msg&&<Alert severity="success">{msg}</Alert>}
