@@ -229,6 +229,8 @@ export const api={
  },
  internalTransfer:(body:{amount:number;from_account_id:number;to_account_id:number;txn_at:string;note?:string|null})=>req<any>('/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  budgets:()=>req<any>('/budgets'),
+ saveBudget:(body:{category:string;monthly_limit:number;is_active?:boolean})=>req<any>('/budgets',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ deleteBudget:(id:number)=>req<any>(`/budgets/${id}`,{method:'DELETE'}),
  commitments:()=>req<any>('/commitments'),
  createCommitment:(body:any)=>req<any>('/commitments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  updateCommitment:(id:number,body:any)=>req<any>(`/commitments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
