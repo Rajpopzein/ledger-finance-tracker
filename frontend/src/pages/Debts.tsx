@@ -78,6 +78,7 @@ export default function Debts(){
   const [editForm,setEditForm]=useState(emptyForm())
   const [payment,setPayment]=useState<Record<number,string>>({})
   const [paymentSource,setPaymentSource]=useState<Record<number,string>>({})
+  const [paymentDebt,setPaymentDebt]=useState<Debt|null>(null)
   const [actionAnchor,setActionAnchor]=useState<HTMLElement|null>(null)
   const [actionDebt,setActionDebt]=useState<Debt|null>(null)
   const [actionActive,setActionActive]=useState(false)
@@ -210,6 +211,7 @@ export default function Debts(){
         }:{})
       })
       setPayment(current=>({...current,[debt.id]:''}))
+      setPaymentDebt(null)
       setNotice('Payment recorded and outstanding balance updated.')
       await load()
     }catch(e:any){
@@ -330,7 +332,6 @@ export default function Debts(){
       rate:110,
       commitment:145,
       due:135,
-      payment:350,
       actions:72,
     }
     const fixed=(width:number)=>({width,minWidth:width,maxWidth:width})
@@ -342,7 +343,6 @@ export default function Debts(){
       widths.rate+
       widths.commitment+
       widths.due+
-      (activeRows&&canManage?widths.payment:0)+
       (canManage?widths.actions:0)
 
     return <TableContainer component={Paper} sx={{...clay,overflowX:'auto'}}>
@@ -356,7 +356,6 @@ export default function Debts(){
             <TableCell sx={{fontWeight:800,...fixed(widths.rate)}} align="right">Rate / APR</TableCell>
             <TableCell sx={{fontWeight:800,...fixed(widths.commitment)}} align="right">EMI / Min due</TableCell>
             <TableCell sx={{fontWeight:800,...fixed(widths.due)}}>Next due</TableCell>
-            {activeRows&&canManage&&<TableCell sx={{fontWeight:800,...fixed(widths.payment)}}>Record payment</TableCell>}
             {canManage&&<TableCell sx={{fontWeight:800,...fixed(widths.actions)}}>Actions</TableCell>}
           </TableRow>
         </TableHead>
@@ -384,39 +383,6 @@ export default function Debts(){
               <TableCell sx={fixed(widths.rate)} align="right">{debt.interest_rate!=null?`${debt.interest_rate}%`:'—'}</TableCell>
               <TableCell sx={fixed(widths.commitment)} align="right">{debt.emi_amount!=null?money(debt.emi_amount):'—'}</TableCell>
               <TableCell sx={fixed(widths.due)}>{debt.next_due_date?new Date(debt.next_due_date).toLocaleDateString('en-IN'):'—'}</TableCell>
-              {activeRows&&canManage&&<TableCell sx={fixed(widths.payment)}>
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <TextField
-                    size="small"
-                    type="number"
-                    placeholder="Amount"
-                    value={payment[debt.id]||''}
-                    onChange={e=>setPayment(current=>({...current,[debt.id]:e.target.value}))}
-                    inputProps={{min:0,step:.01,inputMode:'decimal'}}
-                    sx={{width:105}}
-                  />
-                  {isCard&&<TextField
-                    select
-                    size="small"
-                    label="Pay from"
-                    value={paymentSource[debt.id]||(bankAccounts[0]?String(bankAccounts[0].id):'cash')}
-                    onChange={e=>setPaymentSource(current=>({...current,[debt.id]:String(e.target.value)}))}
-                    sx={{width:145}}
-                  >
-                    {bankAccounts.map((account:any)=><MenuItem key={account.id} value={String(account.id)}>{account.name}</MenuItem>)}
-                    <MenuItem value="cash">Cash in hand</MenuItem>
-                  </TextField>}
-                  <Button
-                    size="small"
-                    variant="contained"
-                    startIcon={<PaidRoundedIcon/>}
-                    disabled={busy==='payment:'+debt.id||!Number(payment[debt.id]||0)}
-                    onClick={()=>addPayment(debt)}
-                  >
-                    Pay
-                  </Button>
-                </Stack>
-              </TableCell>}
               {canManage&&<TableCell sx={{...fixed(widths.actions),textAlign:'center'}}>
                 <IconButton
                   size="small"
@@ -434,7 +400,7 @@ export default function Debts(){
             </TableRow>
           })}
           {!rows.length&&<TableRow>
-            <TableCell colSpan={canManage?(activeRows?8:7):7}>
+            <TableCell colSpan={canManage?7:7}>
               <Typography variant="body2" color="text.secondary" sx={{py:2,textAlign:'center'}}>
                 {activeRows?'No active liabilities yet.':'No closed or paused liabilities.'}
               </Typography>
@@ -522,6 +488,15 @@ export default function Debts(){
       anchorOrigin={{vertical:'bottom',horizontal:'right'}}
       transformOrigin={{vertical:'top',horizontal:'right'}}
     >
+      {actionActive&&<MenuItem onClick={()=>{
+        const debt=actionDebt
+        setActionAnchor(null)
+        setActionDebt(null)
+        if(debt)setPaymentDebt(debt)
+      }}>
+        <PaidRoundedIcon fontSize="small" sx={{mr:1.25}}/>
+        Record payment
+      </MenuItem>}
       <MenuItem onClick={()=>{
         const debt=actionDebt
         setActionAnchor(null)
@@ -553,6 +528,64 @@ export default function Debts(){
         Delete
       </MenuItem>
     </Menu>
+
+    <Dialog
+      open={paymentDebt!==null}
+      onClose={paymentDebt&&busy==='payment:'+paymentDebt.id?undefined:()=>setPaymentDebt(null)}
+      fullWidth
+      maxWidth="xs"
+    >
+      <DialogTitle>Record payment</DialogTitle>
+      <DialogContent>
+        {paymentDebt&&<Stack spacing={1.6} sx={{pt:.5}}>
+          <Box>
+            <Typography variant="body2" fontWeight={800}>{paymentDebt.lender}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Outstanding {money(paymentDebt.outstanding_balance)}
+            </Typography>
+          </Box>
+
+          <TextField
+            autoFocus
+            label="Payment amount"
+            type="number"
+            value={payment[paymentDebt.id]||''}
+            onChange={e=>setPayment(current=>({...current,[paymentDebt.id]:e.target.value}))}
+            inputProps={{min:0,step:.01,inputMode:'decimal'}}
+          />
+
+          {paymentDebt.debt_type==='credit_card'&&<TextField
+            select
+            label="Pay from"
+            value={paymentSource[paymentDebt.id]||(bankAccounts[0]?String(bankAccounts[0].id):'cash')}
+            onChange={e=>setPaymentSource(current=>({...current,[paymentDebt.id]:String(e.target.value)}))}
+          >
+            {bankAccounts.map((account:any)=><MenuItem key={account.id} value={String(account.id)}>{account.name}</MenuItem>)}
+            <MenuItem value="cash">Cash in hand</MenuItem>
+          </TextField>}
+
+          {paymentDebt.debt_type==='credit_card'&&<Alert severity="info">
+            Paying a credit card reduces the selected bank/cash balance and the card outstanding. It is not counted as new spending.
+          </Alert>}
+        </Stack>}
+      </DialogContent>
+      <DialogActions sx={{p:2}}>
+        <Button
+          onClick={()=>setPaymentDebt(null)}
+          disabled={Boolean(paymentDebt&&busy==='payment:'+paymentDebt.id)}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={<PaidRoundedIcon/>}
+          disabled={!paymentDebt||busy==='payment:'+paymentDebt.id||!Number(paymentDebt?payment[paymentDebt.id]||0:0)}
+          onClick={()=>{if(paymentDebt)addPayment(paymentDebt)}}
+        >
+          {paymentDebt&&busy==='payment:'+paymentDebt.id?'Saving…':'Record payment'}
+        </Button>
+      </DialogActions>
+    </Dialog>
 
     <Dialog
       open={addOpen}
