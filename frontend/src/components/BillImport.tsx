@@ -26,6 +26,7 @@ type BillForm={
   merchant:string
   amount:string
   date:string
+  paymentDate:string
   category:string
   paymentMethod:string
   accountId:string
@@ -34,6 +35,11 @@ type BillForm={
 }
 
 const today=()=>new Date().toISOString().slice(0,10)
+const nowLocal=()=>{
+  const d=new Date()
+  const local=new Date(d.getTime()-d.getTimezoneOffset()*60_000)
+  return local.toISOString().slice(0,16)
+}
 
 export default function BillImport(){
   const {resolvedMode}=useUI()
@@ -50,6 +56,7 @@ export default function BillImport(){
     merchant:'',
     amount:'',
     date:today(),
+    paymentDate:nowLocal(),
     category:'Other',
     paymentMethod:'',
     accountId:'',
@@ -94,6 +101,7 @@ export default function BillImport(){
         merchant:p.merchant||'',
         amount:p.total_amount!=null?String(p.total_amount):'',
         date:p.bill_date||today(),
+        paymentDate:nowLocal(),
         category:p.category||'Other',
         paymentMethod:suggested,
         accountId:(suggested==='upi'||suggested==='bank')&&bankAccounts.length===1?String(bankAccounts[0].id):'',
@@ -119,6 +127,7 @@ export default function BillImport(){
         credit_card_id:form.paymentMethod==='credit_card'?Number(form.creditCardId):null,
         category:form.category,
         txn_at:new Date(`${form.date}T12:00:00`).toISOString(),
+        paid_at:new Date(form.paymentDate).toISOString(),
         merchant:form.merchant.trim(),
         note:form.note.trim()||null,
         source_file_name:preview?.file_name||fileName||null,
@@ -132,6 +141,7 @@ export default function BillImport(){
           merchant:'',
           amount:'',
           date:today(),
+          paymentDate:nowLocal(),
           category:'Other',
           paymentMethod:'',
           accountId:'',
@@ -153,6 +163,7 @@ export default function BillImport(){
     form.merchant.trim()&&
     Number(form.amount)>0&&
     form.date&&
+    form.paymentDate&&
     form.category&&
     form.paymentMethod&&
     (!needsBank||form.accountId)&&
@@ -217,7 +228,7 @@ export default function BillImport(){
       </Stack>
 
       <Alert severity="info" sx={{mb:1.5}}>
-        Confirm the values and how you paid. Ledger will not create an expense until you press Add expense.
+        Confirm the bill date, when you actually paid, and how you paid. Ledger uses the payment time to update your available balance.
       </Alert>
 
       <Box sx={{
@@ -243,6 +254,14 @@ export default function BillImport(){
           value={form.date}
           onChange={e=>setForm(v=>({...v,date:e.target.value}))}
           InputLabelProps={{shrink:true}}
+        />
+        <TextField
+          label="Paid at"
+          type="datetime-local"
+          value={form.paymentDate}
+          onChange={e=>setForm(v=>({...v,paymentDate:e.target.value}))}
+          InputLabelProps={{shrink:true}}
+          helperText="Used to update your current available balance."
         />
         <TextField
           select
