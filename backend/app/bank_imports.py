@@ -152,6 +152,8 @@ async def commit_bank_statement(
                         external_hash=file_hash,
                     )
                 )
+            if not match.bank_ref and row.get("bank_ref"):
+                match.bank_ref = row["bank_ref"]
             continue
 
         if state == "review":
