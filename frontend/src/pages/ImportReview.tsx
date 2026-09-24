@@ -11,9 +11,10 @@ import BankImport from '../components/BankImport'
 import UPIImport from '../components/UPIImport'
 import DebtImport from '../components/DebtImport'
 import InvestmentImport from '../components/InvestmentImport'
+import ReconciliationCenter from '../components/ReconciliationCenter'
 import {claySx,useUI} from '../ui'
 
-type ImportMode='bank'|'upi'|'debt'|'investment'
+type ImportMode='bank'|'upi'|'reconciliation'|'debt'|'investment'
 
 export default function ImportReview(){
   const {resolvedMode}=useUI()
@@ -69,6 +70,7 @@ export default function ImportReview(){
       >
         <Tab disableRipple value="bank" label="Bank"/>
         <Tab disableRipple value="upi" label="UPI"/>
+        <Tab disableRipple value="reconciliation" label="Review"/>
         <Tab disableRipple value="debt" label="Debt"/>
         <Tab disableRipple value="investment" label="Investments"/>
       </Tabs>
@@ -76,6 +78,7 @@ export default function ImportReview(){
 
     {mode==='bank'&&<BankImport/>}
     {mode==='upi'&&<UPIImport/>}
+    {mode==='reconciliation'&&<ReconciliationCenter/>}
     {mode==='debt'&&<DebtImport/>}
     {mode==='investment'&&<InvestmentImport/>}
   </Stack>
