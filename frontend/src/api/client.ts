@@ -227,6 +227,16 @@ export const api={
    f.append('file',file)
    return req<any>('/imports/upi/commit',{method:'POST',body:f})
  },
+ internalTransfer:(body:{amount:number;from_account_id:number;to_account_id:number;txn_at:string;note?:string|null})=>req<any>('/transfers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ budgets:()=>req<any>('/budgets'),
+ saveBudget:(body:{category:string;monthly_limit:number;is_active?:boolean})=>req<any>('/budgets',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ deleteBudget:(id:number)=>req<any>(`/budgets/${id}`,{method:'DELETE'}),
+ commitments:()=>req<any>('/commitments'),
+ createCommitment:(body:any)=>req<any>('/commitments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ updateCommitment:(id:number,body:any)=>req<any>(`/commitments/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ completeCommitment:(id:number)=>req<any>(`/commitments/${id}/complete`,{method:'POST'}),
+ deleteCommitment:(id:number)=>req<any>(`/commitments/${id}`,{method:'DELETE'}),
+ planningSummary:()=>req<any>('/planning-summary'),
  aiSettings:()=>req<any>('/ai/settings'),
  aiCapabilities:()=>req<any>('/ai/capabilities'),
  aiHistory:(limit=40)=>req<any>(`/ai/history?limit=${limit}`),

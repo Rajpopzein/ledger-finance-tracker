@@ -176,6 +176,23 @@ class CreditCardTransactionLink(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
+class InternalTransfer(Base):
+    __tablename__ = "internal_transfers"
+    __table_args__ = (
+        UniqueConstraint("user_id", "transfer_key", name="uq_internal_transfer_user_key"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    from_account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    to_account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    outgoing_transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), unique=True, index=True)
+    incoming_transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), unique=True, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    transferred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transfer_key: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
 class TransactionSource(Base):
     __tablename__ = "transaction_sources"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -248,6 +265,35 @@ class AISetting(Base):
     allow_balances: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_notes: Mapped[bool] = mapped_column(Boolean, default=False)
 
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category_id", name="uq_budget_user_category"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
+    monthly_limit: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    category: Mapped[Category] = relationship()
+
+class Commitment(Base):
+    __tablename__ = "commitments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    next_due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    recurrence: Mapped[str] = mapped_column(String(20), default="monthly")
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    category: Mapped[Category | None] = relationship()
 
 class Debt(Base):
     __tablename__ = "debts"
