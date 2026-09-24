@@ -218,7 +218,7 @@ export default function Investments(){
     </Paper>}
 
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{mb:1}}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{mb:1}}>
         <Typography variant="h2">Holdings</Typography>
         <Chip size="small" label={data.count}/>
       </Stack>
