@@ -36,6 +36,10 @@ export type Summary={
   spent:number
   available:number
   liquid_balance:number
+  balance_configured:boolean
+  bank_balance?:number|null
+  cash_balance?:number|null
+  balance_as_of?:string|null
   investment_value:number
   debt_outstanding:number
   debt_count:number

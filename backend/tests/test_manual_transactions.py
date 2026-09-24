@@ -7,8 +7,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from backend.app.db import Base
-from backend.app.main import _create_manual_transaction, app
-from backend.app.models import Account, Transaction, User
+from backend.app.main import _create_manual_transaction, _current_available_balance, app
+from backend.app.models import Account, AvailableBalance, Transaction, User
 
 
 def _db():
@@ -133,3 +133,98 @@ def test_available_balance_uses_liquid_balance_formula():
     spent = Decimal("200.00")
     liquid_balance = opening_balance + new_income - spent
     assert max(Decimal("0"), liquid_balance) == Decimal("1300.00")
+
+
+def test_credit_card_purchase_does_not_reduce_available_balance():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    bank = Account(
+        user_id=user.id,
+        name="Primary Bank",
+        institution="Bank",
+        type="bank",
+        is_active=True,
+    )
+    db.add(bank)
+    db.flush()
+
+    as_of = datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc)
+    db.add(AvailableBalance(
+        user_id=user.id,
+        bank_balance=Decimal("1000.00"),
+        cash_balance=Decimal("200.00"),
+        as_of=as_of,
+    ))
+    db.commit()
+
+    upi_expense = _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("100.00"),
+        direction="debit",
+        payment_method="upi",
+        category_name="Groceries",
+        txn_at=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
+        merchant="Store",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+    cash_expense = _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("50.00"),
+        direction="debit",
+        payment_method="cash",
+        category_name="Food & Dining",
+        txn_at=datetime(2026, 9, 24, 10, 30, tzinfo=timezone.utc),
+        merchant="Cafe",
+        note=None,
+        account_id=None,
+        db=db,
+    )
+    card_purchase = _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("300.00"),
+        direction="debit",
+        payment_method="credit_card",
+        category_name="Shopping",
+        txn_at=datetime(2026, 9, 24, 11, 0, tzinfo=timezone.utc),
+        merchant="Shop",
+        note=None,
+        account_id=None,
+        db=db,
+    )
+    income = _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("500.00"),
+        direction="credit",
+        payment_method="upi",
+        category_name="Payroll",
+        txn_at=datetime(2026, 9, 24, 11, 30, tzinfo=timezone.utc),
+        merchant="Employer",
+        note=None,
+        account_id=bank.id,
+        db=db,
+    )
+
+    assert upi_expense["verification_status"] == "verified"
+    assert cash_expense["verification_status"] == "verified"
+    assert card_purchase["txn_type"] == "credit_card_purchase"
+    assert card_purchase["verification_status"] == "verified"
+    assert income["verification_status"] == "verified"
+
+    state = _current_available_balance(db, user.id)
+    assert state is not None
+    assert state["bank_balance"] == Decimal("1400.00")
+    assert state["cash_balance"] == Decimal("150.00")
+    assert state["total"] == Decimal("1550.00")
+
+
+def test_balance_and_verify_routes_are_available():
+    balance_get = next(route for route in app.routes if getattr(route, "path", None) == "/api/balance" and "GET" in route.methods)
+    balance_put = next(route for route in app.routes if getattr(route, "path", None) == "/api/balance" and "PUT" in route.methods)
+    verify = next(route for route in app.routes if getattr(route, "path", None) == "/api/transactions/{tx_id}/verify")
+    assert balance_get is not None
+    assert balance_put is not None
+    assert "POST" in verify.methods

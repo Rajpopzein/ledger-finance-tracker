@@ -4,10 +4,15 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
   Paper,
   Skeleton,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
@@ -167,6 +172,82 @@ function RecentCard({tx,mode,onAll}:{tx:Tx[];mode:'light'|'dark';onAll:()=>void}
   </Paper>
 }
 
+function BalanceDialog({
+  open,
+  onClose,
+  onSaved,
+  summary,
+}:{
+  open:boolean
+  onClose:()=>void
+  onSaved:()=>void|Promise<void>
+  summary:Summary
+}){
+  const [bank,setBank]=useState('')
+  const [cash,setCash]=useState('')
+  const [saving,setSaving]=useState(false)
+  const [error,setError]=useState('')
+
+  useEffect(()=>{
+    if(!open)return
+    setBank(summary.bank_balance==null?'':String(Math.max(0,summary.bank_balance)))
+    setCash(summary.cash_balance==null?'':String(Math.max(0,summary.cash_balance)))
+    setError('')
+  },[open,summary.bank_balance,summary.cash_balance])
+
+  async function save(){
+    setSaving(true)
+    setError('')
+    try{
+      await api.updateBalance({
+        bank_balance:Number(bank||0),
+        cash_balance:Number(cash||0),
+      })
+      await onSaved()
+      onClose()
+    }catch(e:any){
+      setError(e.message||'Could not update available balance.')
+    }finally{
+      setSaving(false)
+    }
+  }
+
+  return <Dialog open={open} onClose={saving?undefined:onClose} fullWidth maxWidth="xs">
+    <DialogTitle>Set current balance</DialogTitle>
+    <DialogContent>
+      <Stack spacing={1.5} sx={{pt:.6}}>
+        <Typography variant="body2" color="text.secondary">
+          Enter what you have right now. Transactions recorded after this balance point will automatically adjust it.
+        </Typography>
+        <TextField
+          label="Money in bank"
+          type="number"
+          value={bank}
+          inputProps={{min:0,step:.01,inputMode:'decimal'}}
+          onChange={e=>setBank(e.target.value)}
+        />
+        <TextField
+          label="Cash in hand"
+          type="number"
+          value={cash}
+          inputProps={{min:0,step:.01,inputMode:'decimal'}}
+          onChange={e=>setCash(e.target.value)}
+        />
+        <Alert severity="info">
+          Cash, UPI and investment payments reduce liquid balance. Credit-card purchases do not reduce bank or cash balance.
+        </Alert>
+        {error&&<Alert severity="error">{error}</Alert>}
+      </Stack>
+    </DialogContent>
+    <DialogActions sx={{p:2}}>
+      <Button onClick={onClose} disabled={saving}>Cancel</Button>
+      <Button variant="contained" onClick={save} disabled={saving||Number(bank||0)<0||Number(cash||0)<0}>
+        {saving?'Saving…':'Save balance'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+}
+
 export default function Overview(){
   const {period,setPeriodKey}=usePeriod()
   const {familyScope,familyUserId,scopeLabel}=useFamily()
@@ -174,6 +255,7 @@ export default function Overview(){
   const [s,setS]=useState<Summary|null>(null)
   const [tx,setTx]=useState<Tx[]>([])
   const [cash,setCash]=useState(false)
+  const [balanceOpen,setBalanceOpen]=useState(false)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
 
@@ -230,17 +312,37 @@ export default function Overview(){
   }}>
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={2}>
       <Box>
-        <Typography variant="overline" color="text.secondary">AVAILABLE · {scopeLabel.toUpperCase()}</Typography>
+        <Typography variant="overline" color="text.secondary">AVAILABLE BALANCE · {scopeLabel.toUpperCase()}</Typography>
         <Typography sx={{fontSize:'clamp(1.95rem,9vw,4rem)',fontWeight:850,letterSpacing:'-.055em',lineHeight:1.05}}>{money(s.available)}</Typography>
-        <Typography color="text.secondary" sx={{mt:.8}}>Income − spent for {period.label}</Typography>
+        {s.balance_configured
+          ? <Typography color="text.secondary" sx={{mt:.8}}>
+              Bank {money(s.bank_balance||0)} · Cash in hand {money(s.cash_balance||0)}
+            </Typography>
+          : <Typography color="text.secondary" sx={{mt:.8}}>
+              Set your current bank balance and cash in hand to start tracking what is actually available.
+            </Typography>}
       </Box>
-      <Button startIcon={<AddRoundedIcon/>} variant="contained" onClick={()=>setCash(true)} sx={{alignSelf:{xs:'stretch',sm:'flex-start'}}}>Add transaction</Button>
+      <Stack direction={{xs:'column',sm:'row'}} spacing={1} sx={{alignSelf:{xs:'stretch',sm:'flex-start'}}}>
+        {familyScope==='self'&&!familyUserId&&<Button variant="outlined" onClick={()=>setBalanceOpen(true)}>
+          {s.balance_configured?'Update balance':'Set balance'}
+        </Button>}
+        <Button startIcon={<AddRoundedIcon/>} variant="contained" onClick={()=>setCash(true)}>Add transaction</Button>
+      </Stack>
     </Stack>
 
     <Box sx={{mt:{xs:2,sm:3}}}>
-      <Stack direction="row" justifyContent="space-between" spacing={2}>
-        <Typography variant="body2" fontWeight={700}>{pct}% verified</Typography>
-        <Typography variant="caption" color="text.secondary">{s.verified} of {s.total} items</Typography>
+      <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{sm:'center'}} spacing={1}>
+        <Box>
+          <Typography variant="body2" fontWeight={700}>{pct}% verified</Typography>
+          <Typography variant="caption" color="text.secondary">{s.verified} of {s.total} items verified</Typography>
+        </Box>
+        {s.needs_review>0&&familyScope==='self'&&!familyUserId&&<Button
+          size="small"
+          variant="outlined"
+          onClick={()=>window.location.assign('/#/transactions?status=review')}
+        >
+          Review {s.needs_review} transaction{s.needs_review===1?'':'s'}
+        </Button>}
       </Stack>
       <LinearProgress variant="determinate" value={pct} sx={{mt:.8,height:8,borderRadius:99}}/>
     </Box>
@@ -341,5 +443,6 @@ export default function Overview(){
     {dashboardTemplate==='focus'?focus:dashboardTemplate==='insights'?insights:balanced}
 
     <QuickCash open={cash} onClose={()=>setCash(false)} onSaved={load}/>
+    <BalanceDialog open={balanceOpen} onClose={()=>setBalanceOpen(false)} onSaved={load} summary={s}/>
   </Stack>
 }

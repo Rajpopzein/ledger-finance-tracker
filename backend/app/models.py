@@ -91,6 +91,15 @@ class Account(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     user: Mapped[User | None] = relationship()
 
+class AvailableBalance(Base):
+    __tablename__ = "available_balances"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    bank_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    cash_balance: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class Category(Base):
     __tablename__ = "categories"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_category_user_name"),)
