@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, engine, get_db
-from .models import Account, AvailableBalance, BalanceSnapshot, Category, CreditCardTransactionLink, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, DebtPayment, InvestmentHolding
+from .models import Account, AvailableBalance, BalanceSnapshot, Category, CreditCardTransactionLink, InternalTransfer, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, DebtPayment, InvestmentHolding
 from .schemas import AccountCreate, AvailableBalanceUpdate, CashTransactionCreate, ManualTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
 from .services.importer import parse_statement
@@ -26,6 +26,7 @@ from .finance_features import router as finance_features_router
 from .shortcuts import router as shortcuts_router
 from .investments import router as investments_router
 from .accounting_core import router as accounting_core_router
+from .planning import router as planning_router
 from .users import router as users_router, current_user_id, linked_user_ids, resolve_ai_provider_user_id, require_family_ai_insights, scoped_family_user_ids, shared_linked_user_ids
 from .services.auth import (
     SESSION_COOKIE,
@@ -50,6 +51,7 @@ app.include_router(finance_features_router)
 app.include_router(shortcuts_router)
 app.include_router(investments_router)
 app.include_router(accounting_core_router)
+app.include_router(planning_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(CONFIGURED_CORS_ORIGINS|NATIVE_APP_ORIGINS),
@@ -730,7 +732,13 @@ def update_transaction(
         raise HTTPException(404,"Transaction not found")
 
     link=db.scalar(select(CreditCardTransactionLink).where(CreditCardTransactionLink.transaction_id==tx.id))
+    transfer=db.scalar(select(InternalTransfer).where(or_(
+        InternalTransfer.outgoing_transaction_id==tx.id,
+        InternalTransfer.incoming_transaction_id==tx.id,
+    )))
     values=body.model_dump(exclude_unset=True)
+    if transfer and values:
+        raise HTTPException(400,"Own-account transfers are linked pairs. Delete and recreate the transfer to change it.")
     if link and link.entry_type=="payment" and any(key in values for key in ("amount","direction","account_id")):
         raise HTTPException(400,"Edit credit-card payments from the liability tracker")
     old_amount=Decimal(tx.amount)
@@ -811,6 +819,25 @@ def delete_transaction(tx_id:int, request:Request, db:Session=Depends(get_db)):
     tx=db.get(Transaction,tx_id)
     if not tx or tx.user_id!=user_id:
         raise HTTPException(404,"Transaction not found")
+    transfer=db.scalar(select(InternalTransfer).where(or_(
+        InternalTransfer.outgoing_transaction_id==tx.id,
+        InternalTransfer.incoming_transaction_id==tx.id,
+    )))
+    if transfer:
+        counterpart_id=(
+            transfer.incoming_transaction_id
+            if transfer.outgoing_transaction_id==tx.id
+            else transfer.outgoing_transaction_id
+        )
+        counterpart=db.get(Transaction,counterpart_id)
+        db.delete(transfer)
+        db.flush()
+        if counterpart:
+            db.delete(counterpart)
+        db.delete(tx)
+        db.commit()
+        return {"ok":True,"deleted_transfer_pair":True}
+
     link=db.scalar(select(CreditCardTransactionLink).where(CreditCardTransactionLink.transaction_id==tx.id))
     if link:
         debt=db.get(Debt,link.debt_id)
