@@ -156,6 +156,12 @@ export const api={
  updateDebt:(debtId:number,body:any)=>req<any>(`/debts/${debtId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  deleteDebt:(debtId:number)=>req<any>(`/debts/${debtId}`,{method:'DELETE'}),
  addDebtPayment:(debtId:number,body:any)=>req<any>(`/debts/${debtId}/payments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
+ billAIPreview:(file:File)=>{
+   const f=new FormData()
+   f.append('file',file)
+   return req<any>('/bills/ai-preview',{method:'POST',body:f})
+ },
+ billCommit:(body:any)=>req<any>('/bills/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),
  debtAIPreview:(file:File)=>{
    const f=new FormData()
    f.append('file',file)
