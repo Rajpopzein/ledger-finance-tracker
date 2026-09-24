@@ -71,6 +71,7 @@ class BillExpenseCreate(BaseModel):
     credit_card_id: int | None = None
     category: str = Field(min_length=1, max_length=80)
     txn_at: datetime
+    paid_at: datetime | None = None
     merchant: str = Field(min_length=1, max_length=160)
     note: str | None = Field(default=None, max_length=2000)
     source_file_name: str | None = Field(default=None, max_length=255)
