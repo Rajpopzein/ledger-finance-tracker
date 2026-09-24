@@ -354,3 +354,32 @@ def test_mark_paid_advances_monthly_commitment_and_closes_one_time():
     assert monthly.next_due_date.month != due.month or monthly.next_due_date.year != due.year
     assert one_time_result["is_active"] is False
     assert one_time.is_active is False
+
+
+def test_stale_monthly_debt_is_rolled_forward_without_historical_duplicates():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    now = datetime.now(timezone.utc)
+    db.add(AvailableBalance(user_id=user.id, bank_balance=Decimal("50000.00"), cash_balance=Decimal("0.00"), as_of=now))
+    db.add(Debt(
+        user_id=user.id,
+        lender="Old EMI",
+        debt_type="loan",
+        principal=Decimal("100000.00"),
+        outstanding_balance=Decimal("50000.00"),
+        emi_amount=Decimal("10000.00"),
+        next_due_date=now - timedelta(days=150),
+        status="active",
+        source_type="manual",
+    ))
+    db.commit()
+
+    summary = planning_summary(_request(user.id), db, months=1)
+    emis = [item for item in summary["upcoming"] if item["title"] == "Old EMI"]
+    assert len(emis) == 1
+    due = datetime.fromisoformat(emis[0]["next_due_date"])
+    assert due >= now
+    assert due <= now + timedelta(days=32)
+    assert summary["committed_in_horizon"] == 10000.0
