@@ -26,6 +26,7 @@ const initialForm=()=>({
   direction:'debit' as 'credit'|'debit',
   payment_method:'cash' as 'cash'|'upi'|'credit_card',
   account_id:'',
+  credit_card_id:'',
   category:'Food & Dining',
   txn_at:new Date().toISOString().slice(0,16),
   merchant:'',
@@ -45,11 +46,23 @@ export default function QuickCash({
   const cats=categories.length?categories:defaults.map(name=>({name}))
   const bankAccounts=accounts.filter((account:any)=>account.type==='bank')
   const [form,setForm]=useState(initialForm)
+  const [cards,setCards]=useState<any[]>([])
   const [saving,setSaving]=useState(false)
   const [error,setError]=useState('')
 
   useEffect(()=>{
-    if(open)setError('')
+    if(!open)return
+    setError('')
+    api.debts('self')
+      .then(result=>{
+        const activeCards=(result?.items||[]).filter((debt:any)=>debt.debt_type==='credit_card'&&debt.status==='active')
+        setCards(activeCards)
+        setForm(current=>({
+          ...current,
+          credit_card_id:current.credit_card_id||String(activeCards[0]?.id||''),
+        }))
+      })
+      .catch(()=>setCards([]))
   },[open])
 
   function setDirection(direction:'credit'|'debit'){
@@ -70,6 +83,9 @@ export default function QuickCash({
       account_id:payment_method==='upi'
         ? current.account_id||String(bankAccounts[0]?.id||'')
         : '',
+      credit_card_id:payment_method==='credit_card'
+        ? current.credit_card_id||String(cards[0]?.id||'')
+        : '',
     }))
   }
 
@@ -78,7 +94,8 @@ export default function QuickCash({
       saving||
       !form.amount||
       !form.category||
-      (form.payment_method==='upi'&&!form.account_id)
+      (form.payment_method==='upi'&&!form.account_id)||
+      (form.payment_method==='credit_card'&&!form.credit_card_id)
     )return
 
     setSaving(true)
@@ -89,6 +106,7 @@ export default function QuickCash({
         direction:form.direction,
         payment_method:form.payment_method,
         account_id:form.payment_method==='upi'?Number(form.account_id):null,
+        credit_card_id:form.payment_method==='credit_card'?Number(form.credit_card_id):null,
         category:form.category,
         txn_at:new Date(form.txn_at).toISOString(),
         merchant:form.merchant.trim()||null,
@@ -158,12 +176,28 @@ export default function QuickCash({
           </Select>
         </FormControl>}
 
+        {form.payment_method==='credit_card'&&<FormControl size="small" disabled={saving||!cards.length}>
+          <InputLabel>Credit card</InputLabel>
+          <Select
+            label="Credit card"
+            value={form.credit_card_id}
+            onChange={e=>setForm({...form,credit_card_id:String(e.target.value)})}
+          >
+            {cards.map((card:any)=><MenuItem key={card.id} value={String(card.id)}>
+              {card.lender} · {new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(card.outstanding_balance)} outstanding
+            </MenuItem>)}
+          </Select>
+        </FormControl>}
+
         {upiUnavailable&&<Alert severity="warning">
           Add a bank account first before recording a manual UPI transaction.
         </Alert>}
 
-        {form.payment_method==='credit_card'&&<Alert severity="info">
-          Credit-card purchases count as spending but do not reduce your available bank or cash balance.
+        {form.payment_method==='credit_card'&&!cards.length&&<Alert severity="warning">
+          Add a credit card in Liabilities before recording a card purchase.
+        </Alert>}
+        {form.payment_method==='credit_card'&&cards.length>0&&<Alert severity="info">
+          This purchase increases the selected card outstanding but does not reduce your available bank or cash balance.
         </Alert>}
 
         <TextField
@@ -223,7 +257,8 @@ export default function QuickCash({
           !form.amount||
           !form.category||
           saving||
-          (form.payment_method==='upi'&&!form.account_id)
+          (form.payment_method==='upi'&&!form.account_id)||
+          (form.payment_method==='credit_card'&&!form.credit_card_id)
         }
       >
         {saving?'Saving…':isIncome?'Save income':'Save expense'}
