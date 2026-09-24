@@ -357,7 +357,7 @@ def test_month_end_balance_snapshot_does_not_overwrite_current_balance():
     assert current is not None
     assert current.bank_balance == Decimal("9000.00")
     assert current.cash_balance == Decimal("500.00")
-    assert current.as_of == current_as_of
+    assert current.as_of.replace(tzinfo=timezone.utc) == current_as_of
     assert month_end is not None
     assert month_end.bank_balance == Decimal("7000.00")
     assert month_end.cash_balance == Decimal("300.00")
