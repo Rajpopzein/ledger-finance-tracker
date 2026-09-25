@@ -1,13 +1,13 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from backend.app.db import Base
-from backend.app.main import _create_manual_transaction, _current_available_balance, _spending_breakdown, app
+from backend.app.main import _create_manual_transaction, _current_available_balance, _spending_breakdown, app, transactions
 from backend.app.models import Account, AvailableBalance, Transaction, User
 from backend.app.services.dedupe import find_match
 
@@ -55,6 +55,65 @@ def test_manual_cash_creates_cash_account_and_manual_category():
     assert tx.category_source == "manual"
     assert tx.account.type == "cash"
     assert tx.account.name == "Cash"
+
+
+
+
+def _request(user_id: int):
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/api/transactions",
+        "headers": [],
+    })
+    request.state.auth = {"role": "user", "sub": str(user_id)}
+    return request
+
+
+def test_transaction_list_includes_and_filters_manual_cash():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+
+    created = _create_manual_transaction(
+        user_id=user.id,
+        amount=Decimal("175.00"),
+        direction="debit",
+        payment_method="cash",
+        category_name="Food & Dining",
+        txn_at=datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc),
+        merchant="Cash Cafe",
+        note="Cash lunch",
+        account_id=None,
+        db=db,
+    )
+
+    all_rows = transactions(
+        request=_request(user.id),
+        from_date=date(2026, 9, 1),
+        to_date=date(2026, 9, 30),
+        family_scope="self",
+        page=1,
+        page_size=25,
+        db=db,
+    )
+    assert created["id"] in [row["id"] for row in all_rows["items"]]
+
+    cash_rows = transactions(
+        request=_request(user.id),
+        payment_method="cash",
+        from_date=date(2026, 9, 1),
+        to_date=date(2026, 9, 30),
+        family_scope="self",
+        page=1,
+        page_size=25,
+        db=db,
+    )
+    assert cash_rows["total"] == 1
+    assert cash_rows["items"][0]["id"] == created["id"]
+    assert cash_rows["items"][0]["account"] == "Cash"
+    assert cash_rows["items"][0]["payment_method"] == "cash"
 
 
 def test_manual_upi_requires_owned_active_bank_account():
