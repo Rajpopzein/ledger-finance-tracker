@@ -45,7 +45,7 @@ export default function QuickCash({
   onClose:()=>void
   onSaved:()=>void|Promise<void>
 }){
-  const {accounts,categories}=useAppData()
+  const {accounts,categories,refreshAccounts}=useAppData()
   const cats=categories.length?categories:defaults.map(name=>({name}))
   const bankAccounts=accounts.filter((account:any)=>account.type==='bank')
   const [form,setForm]=useState(initialForm)
@@ -152,6 +152,9 @@ export default function QuickCash({
           merchant:form.merchant.trim()||null,
           note:form.note.trim()||null,
         })
+        if(form.payment_method==='cash'){
+          await refreshAccounts()
+        }
       }
       await onSaved()
       setForm(initialForm())
