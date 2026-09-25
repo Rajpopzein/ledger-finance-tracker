@@ -55,6 +55,7 @@ export default function Transactions(){
   const [toDate,setToDate]=useState(period.to||'')
   const [accountId,setAccountId]=useState('')
   const [direction,setDirection]=useState('')
+  const [paymentMethod,setPaymentMethod]=useState('')
   const [status,setStatus]=useState(()=>new URLSearchParams(window.location.hash.split('?')[1]||'').get('status')==='review'?'review':'')
   const [data,setData]=useState<TransactionPage>({items:[],page:1,page_size:25,total:0,pages:1})
   const [expandedId,setExpandedId]=useState<number|null>(null)
@@ -91,6 +92,7 @@ export default function Transactions(){
         familyUserId,
         accountId:accountId?Number(accountId):undefined,
         direction:direction==='credit'||direction==='debit'?direction:undefined,
+        paymentMethod:paymentMethod==='cash'||paymentMethod==='upi'||paymentMethod==='credit_card'?paymentMethod:undefined,
         status:status||undefined,
         page,
         pageSize,
@@ -108,7 +110,7 @@ export default function Transactions(){
   useEffect(()=>{
     const timer=setTimeout(load,220)
     return()=>clearTimeout(timer)
-  },[q,fromDate,toDate,accountId,direction,status,page,pageSize,familyScope,familyUserId])
+  },[q,fromDate,toDate,accountId,direction,paymentMethod,status,page,pageSize,familyScope,familyUserId])
 
   async function categorizePage(){
     const ids=data.items.map(x=>x.id)
@@ -221,7 +223,7 @@ export default function Transactions(){
   }
 
   const clay=claySx(resolvedMode)
-  const bankAccounts=accounts.filter(a=>a.type==='bank')
+  const accountOptions=accounts
 
   return <Stack spacing={{xs:1.4,sm:2}}>
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'flex-start',sm:'center'}} spacing={1}>
@@ -245,7 +247,12 @@ export default function Transactions(){
     <Paper sx={{...clay,p:{xs:1.15,sm:1.5}}}>
       <Box sx={{
         display:'grid',
-        gridTemplateColumns:{xs:'1fr',sm:'repeat(2,minmax(0,1fr))',lg:'minmax(220px,1.4fr) 180px 150px 150px 130px 150px'},
+        gridTemplateColumns:{
+          xs:'1fr',
+          sm:'repeat(2,minmax(0,1fr))',
+          lg:'repeat(4,minmax(140px,1fr))',
+          xl:'minmax(220px,1.4fr) 180px 145px 145px 130px 145px 150px',
+        },
         gap:1.25,
         alignItems:'start',
       }}>
@@ -257,10 +264,10 @@ export default function Transactions(){
         />
 
         <FormControl size="small">
-          <InputLabel>Bank</InputLabel>
-          <Select label="Bank" value={accountId} onChange={e=>{setAccountId(String(e.target.value));setPage(1)}}>
-            <MenuItem value="">All banks</MenuItem>
-            {bankAccounts.map(a=><MenuItem key={a.id} value={String(a.id)}>{a.name}</MenuItem>)}
+          <InputLabel>Account</InputLabel>
+          <Select label="Account" value={accountId} onChange={e=>{setAccountId(String(e.target.value));setPage(1)}}>
+            <MenuItem value="">All accounts</MenuItem>
+            {accountOptions.map(a=><MenuItem key={a.id} value={String(a.id)}>{a.name}</MenuItem>)}
           </Select>
         </FormControl>
 
@@ -273,6 +280,16 @@ export default function Transactions(){
             <MenuItem value="">All</MenuItem>
             <MenuItem value="debit">Outgoing</MenuItem>
             <MenuItem value="credit">Incoming</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl size="small">
+          <InputLabel>Payment</InputLabel>
+          <Select label="Payment" value={paymentMethod} onChange={e=>{setPaymentMethod(String(e.target.value));setPage(1)}}>
+            <MenuItem value="">All methods</MenuItem>
+            <MenuItem value="cash">Cash</MenuItem>
+            <MenuItem value="upi">UPI</MenuItem>
+            <MenuItem value="credit_card">Credit card</MenuItem>
           </Select>
         </FormControl>
 
@@ -480,11 +497,18 @@ export default function Transactions(){
       open={addOpen}
       onClose={()=>setAddOpen(false)}
       onSaved={async()=>{
-        if(page===1){
-          await load()
-        }else{
+        const hadHiddenFilters=Boolean(q||accountId||direction||paymentMethod||status)
+        setQ('')
+        setAccountId('')
+        setDirection('')
+        setPaymentMethod('')
+        setStatus('')
+        if(page!==1){
           setPage(1)
+          return
         }
+        if(hadHiddenFilters)return
+        await load()
       }}
     />
   </Stack>
