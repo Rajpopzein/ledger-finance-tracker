@@ -491,6 +491,7 @@ def transactions(
     q:str|None=None,
     status:str|None=None,
     direction:str|None=None,
+    payment_method:str|None=None,
     account_id:int|None=None,
     from_date:date|None=None,
     to_date:date|None=None,
@@ -513,6 +514,8 @@ def transactions(
         stmt=stmt.where(Transaction.verification_status==status)
     if direction in ("debit","credit"):
         stmt=stmt.where(Transaction.direction==direction)
+    if payment_method in ("cash","upi","credit_card"):
+        stmt=stmt.where(Transaction.payment_method==payment_method)
     if q:
         needle=q.strip().lower()
         if needle:
