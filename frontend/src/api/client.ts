@@ -98,6 +98,7 @@ export const api={
    accountId?:number
    status?:string
    direction?:'debit'|'credit'
+   paymentMethod?:'cash'|'upi'|'credit_card'
    page?:number
    pageSize?:number
  }={})=>{
@@ -110,6 +111,7 @@ export const api={
    if(opts.accountId)p.set('account_id',String(opts.accountId))
    if(opts.status)p.set('status',opts.status)
    if(opts.direction)p.set('direction',opts.direction)
+   if(opts.paymentMethod)p.set('payment_method',opts.paymentMethod)
    p.set('page',String(opts.page||1))
    p.set('page_size',String(opts.pageSize||25))
    return req<any>(`/transactions?${p.toString()}`)
