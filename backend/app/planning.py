@@ -15,6 +15,7 @@ from .models import (
     Account,
     AvailableBalance,
     Budget,
+    MonthlyBudget,
     Category,
     Commitment,
     Debt,
@@ -252,12 +253,62 @@ def list_internal_transfers(
     return {"items": [_serialize_transfer(db, row) for row in rows]}
 
 
-def _serialize_budget(row: Budget, spent: Decimal):
+def _budget_month_window(month_key: str | None = None):
+    key = month_key or datetime.now(INDIA_TZ).strftime("%Y-%m")
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", key):
+        raise HTTPException(400, "Budget month must use YYYY-MM")
+    year, month = (int(part) for part in key.split("-"))
+    start_local = datetime(year, month, 1, tzinfo=INDIA_TZ)
+    next_local = (
+        datetime(year + 1, 1, 1, tzinfo=INDIA_TZ)
+        if month == 12
+        else datetime(year, month + 1, 1, tzinfo=INDIA_TZ)
+    )
+    return (
+        key,
+        start_local.strftime("%B %Y"),
+        start_local.astimezone(timezone.utc),
+        next_local.astimezone(timezone.utc),
+    )
+
+
+def migrate_legacy_budgets(db: Session):
+    legacy_rows = db.scalars(
+        select(Budget).where(Budget.is_active == True)
+    ).all()
+    if not legacy_rows:
+        return 0
+    month_key, _, _, _ = _budget_month_window()
+    migrated = 0
+    for legacy in legacy_rows:
+        existing = db.scalar(
+            select(MonthlyBudget).where(
+                MonthlyBudget.user_id == legacy.user_id,
+                MonthlyBudget.category_id == legacy.category_id,
+                MonthlyBudget.month_key == month_key,
+            )
+        )
+        if not existing:
+            db.add(MonthlyBudget(
+                user_id=legacy.user_id,
+                category_id=legacy.category_id,
+                month_key=month_key,
+                monthly_limit=legacy.monthly_limit,
+                is_active=True,
+            ))
+            migrated += 1
+        legacy.is_active = False
+    db.commit()
+    return migrated
+
+
+def _serialize_budget(row: MonthlyBudget, spent: Decimal):
     limit = Decimal(row.monthly_limit)
     remaining = limit - spent
     return {
         "id": row.id,
         "category": row.category.name,
+        "month_key": row.month_key,
         "monthly_limit": float(limit),
         "spent": float(spent),
         "remaining": float(max(Decimal("0"), remaining)),
@@ -267,16 +318,8 @@ def _serialize_budget(row: Budget, spent: Decimal):
     }
 
 
-@router.get("/api/budgets")
-def list_budgets(request: Request, db: Session = Depends(get_db)):
-    user_id = current_user_id(request)
-    now = datetime.now(INDIA_TZ)
-    start = datetime(now.year, now.month, 1, tzinfo=INDIA_TZ).astimezone(timezone.utc)
-    next_month = (
-        datetime(now.year + 1, 1, 1, tzinfo=INDIA_TZ)
-        if now.month == 12
-        else datetime(now.year, now.month + 1, 1, tzinfo=INDIA_TZ)
-    ).astimezone(timezone.utc)
+def _budget_data(db: Session, user_id: int, month_key: str | None = None):
+    key, label, start, next_month = _budget_month_window(month_key)
     txs = db.scalars(
         select(Transaction).where(
             Transaction.user_id == user_id,
@@ -294,17 +337,31 @@ def list_budgets(request: Request, db: Session = Depends(get_db)):
                 spent_by_category.get(tx.category_id, Decimal("0")) + tx.amount
             )
     rows = db.scalars(
-        select(Budget)
-        .where(Budget.user_id == user_id)
-        .order_by(Budget.is_active.desc(), Budget.id.asc())
+        select(MonthlyBudget)
+        .where(
+            MonthlyBudget.user_id == user_id,
+            MonthlyBudget.month_key == key,
+        )
+        .order_by(MonthlyBudget.is_active.desc(), MonthlyBudget.id.asc())
     ).all()
     return {
-        "month": now.strftime("%B %Y"),
+        "month_key": key,
+        "month": label,
         "items": [
             _serialize_budget(row, spent_by_category.get(row.category_id, Decimal("0")))
             for row in rows
         ],
     }
+
+
+@router.get("/api/budgets")
+def list_budgets(
+    request: Request,
+    month_key: str | None = None,
+    db: Session = Depends(get_db),
+):
+    user_id = current_user_id(request)
+    return _budget_data(db, user_id, month_key)
 
 
 @router.put("/api/budgets")
@@ -314,20 +371,23 @@ def upsert_budget(
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
+    month_key, _, _, _ = _budget_month_window(body.month_key)
     category = _category(db, user_id, body.category)
     row = db.scalar(
-        select(Budget).where(
-            Budget.user_id == user_id,
-            Budget.category_id == category.id,
+        select(MonthlyBudget).where(
+            MonthlyBudget.user_id == user_id,
+            MonthlyBudget.category_id == category.id,
+            MonthlyBudget.month_key == month_key,
         )
     )
     if row:
         row.monthly_limit = body.monthly_limit
         row.is_active = body.is_active
     else:
-        row = Budget(
+        row = MonthlyBudget(
             user_id=user_id,
             category_id=category.id,
+            month_key=month_key,
             monthly_limit=body.monthly_limit,
             is_active=body.is_active,
         )
@@ -337,6 +397,7 @@ def upsert_budget(
     return {
         "id": row.id,
         "category": category.name,
+        "month_key": row.month_key,
         "monthly_limit": float(row.monthly_limit),
         "is_active": row.is_active,
     }
@@ -349,7 +410,7 @@ def delete_budget(
     db: Session = Depends(get_db),
 ):
     user_id = current_user_id(request)
-    row = db.get(Budget, budget_id)
+    row = db.get(MonthlyBudget, budget_id)
     if not row or row.user_id != user_id:
         raise HTTPException(404, "Budget not found")
     db.delete(row)
@@ -691,6 +752,7 @@ def planning_summary(
     request: Request,
     db: Session = Depends(get_db),
     months: int = 1,
+    budget_month: str | None = None,
 ):
     user_id = current_user_id(request)
     months = max(1, min(months, 12))
@@ -785,7 +847,7 @@ def planning_summary(
     available = balance["total"] if balance else Decimal("0")
     safe = max(Decimal("0"), available - committed)
 
-    budgets = list_budgets(request, db)
+    budgets = _budget_data(db, user_id, budget_month)
     active_budgets = [item for item in budgets["items"] if item["is_active"]]
     budget_limit = sum((Decimal(str(item["monthly_limit"])) for item in active_budgets), Decimal("0"))
     budget_spent = sum((Decimal(str(item["spent"])) for item in active_budgets), Decimal("0"))
@@ -799,6 +861,7 @@ def planning_summary(
         "committed_next_30_days": float(committed) if months == 1 else float(sum((Decimal(str(item["amount"])) for item in upcoming if datetime.fromisoformat(item["next_due_date"]) <= now + timedelta(days=30)), Decimal("0"))),
         "safe_to_spend": float(safe),
         "upcoming": upcoming,
+        "budget_month_key": budgets["month_key"],
         "budget_month": budgets["month"],
         "budget_limit": float(budget_limit),
         "budget_spent": float(budget_spent),

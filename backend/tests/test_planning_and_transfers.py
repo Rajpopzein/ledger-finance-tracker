@@ -14,6 +14,7 @@ from backend.app.models import (
     Account,
     AvailableBalance,
     Budget,
+    MonthlyBudget,
     Category,
     Commitment,
     Debt,
@@ -21,8 +22,8 @@ from backend.app.models import (
     Transaction,
     User,
 )
-from backend.app.planning import complete_commitment, create_internal_transfer, planning_summary
-from backend.app.schemas import CommitmentPaymentCreate, InternalTransferCreate
+from backend.app.planning import complete_commitment, create_internal_transfer, migrate_legacy_budgets, planning_summary, upsert_budget
+from backend.app.schemas import BudgetUpsert, CommitmentPaymentCreate, InternalTransferCreate
 from backend.app.services.dedupe import find_match
 
 
@@ -217,10 +218,12 @@ def test_safe_to_spend_subtracts_upcoming_commitments_and_budget_spend():
             Category.name == "Groceries",
         )
     )
+    current_budget_month = now.astimezone(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m")
     db.add(
-        Budget(
+        MonthlyBudget(
             user_id=user.id,
             category_id=groceries.id,
+            month_key=current_budget_month,
             monthly_limit=Decimal("1000.00"),
             is_active=True,
         )
@@ -259,6 +262,78 @@ def test_safe_to_spend_subtracts_upcoming_commitments_and_budget_spend():
     assert summary["budget_limit"] == 1000.0
     assert summary["budget_spent"] == 100.0
     assert summary["budgets"][0]["remaining"] == 900.0
+
+
+def test_same_category_can_have_different_budget_for_each_month():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+
+    upsert_budget(
+        BudgetUpsert(
+            category="Groceries",
+            monthly_limit=Decimal("1200.00"),
+            month_key="2026-09",
+            is_active=True,
+        ),
+        _request(user.id),
+        db,
+    )
+    upsert_budget(
+        BudgetUpsert(
+            category="Groceries",
+            monthly_limit=Decimal("2200.00"),
+            month_key="2026-10",
+            is_active=True,
+        ),
+        _request(user.id),
+        db,
+    )
+
+    september = planning_summary(_request(user.id), db, budget_month="2026-09")
+    october = planning_summary(_request(user.id), db, budget_month="2026-10")
+
+    assert september["budget_month_key"] == "2026-09"
+    assert september["budget_limit"] == 1200.0
+    assert september["budgets"][0]["month_key"] == "2026-09"
+    assert october["budget_month_key"] == "2026-10"
+    assert october["budget_limit"] == 2200.0
+    assert october["budgets"][0]["month_key"] == "2026-10"
+
+
+def test_legacy_budgets_migrate_into_current_month_once():
+    db = _db()
+    user = _user()
+    db.add(user)
+    db.flush()
+    category = Category(user_id=user.id, name="Fuel")
+    db.add(category)
+    db.flush()
+    legacy = Budget(
+        user_id=user.id,
+        category_id=category.id,
+        monthly_limit=Decimal("3000.00"),
+        is_active=True,
+    )
+    db.add(legacy)
+    db.commit()
+
+    first = migrate_legacy_budgets(db)
+    second = migrate_legacy_budgets(db)
+
+    db.refresh(legacy)
+    rows = db.scalars(
+        select(MonthlyBudget).where(
+            MonthlyBudget.user_id == user.id,
+            MonthlyBudget.category_id == category.id,
+        )
+    ).all()
+    assert first == 1
+    assert second == 0
+    assert legacy.is_active is False
+    assert len(rows) == 1
+    assert rows[0].monthly_limit == Decimal("3000.00")
 
 
 def test_internal_transfer_does_not_change_aggregate_available_balance():

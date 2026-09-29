@@ -29,6 +29,8 @@ const localDateTimeValue=(value=new Date())=>{
   return new Date(value.getTime()-offsetMs).toISOString().slice(0,16)
 }
 
+const localMonthValue=()=>localDateTimeValue().slice(0,7)
+
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{
   style:'currency',
   currency:'INR',
@@ -50,10 +52,11 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
   const [budgetOpen,setBudgetOpen]=useState(false)
+  const [budgetMonth,setBudgetMonth]=useState(localMonthValue())
   const [commitmentOpen,setCommitmentOpen]=useState(false)
   const [paymentItem,setPaymentItem]=useState<any>(null)
   const [paymentForm,setPaymentForm]=useState({source:'',paid_at:localDateTimeValue()})
-  const [budgetForm,setBudgetForm]=useState({category:'Groceries',monthly_limit:''})
+  const [budgetForm,setBudgetForm]=useState({category:'Groceries',monthly_limit:'',month_key:localMonthValue()})
   const [commitmentForm,setCommitmentForm]=useState({
     title:'',
     amount:'',
@@ -74,7 +77,7 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
     setLoading(true)
     setError('')
     try{
-      setData(await api.planningSummary(planningMonths))
+      setData(await api.planningSummary(planningMonths,budgetMonth))
     }catch(e:any){
       setData(null)
       setError(e.message||'Could not load planning data.')
@@ -83,21 +86,29 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
     }
   }
 
-  useEffect(()=>{load()},[refreshKey,planningMonths])
+  useEffect(()=>{load()},[refreshKey,planningMonths,budgetMonth])
+
+  function startBudget(){
+    setBudgetForm(current=>({...current,month_key:budgetMonth}))
+    setBudgetOpen(true)
+  }
 
   async function saveBudget(){
-    if(!budgetForm.category||!Number(budgetForm.monthly_limit))return
+    if(!budgetForm.category||!budgetForm.month_key||!Number(budgetForm.monthly_limit))return
     setBusy('budget');setError('');setNotice('')
     try{
+      const savedMonth=budgetForm.month_key
       await api.saveBudget({
         category:budgetForm.category,
         monthly_limit:Number(budgetForm.monthly_limit),
+        month_key:savedMonth,
         is_active:true,
       })
       setBudgetOpen(false)
+      setBudgetMonth(savedMonth)
       setBudgetForm(current=>({...current,monthly_limit:''}))
-      setNotice('Budget saved.')
-      await load()
+      setNotice('Budget saved for the selected month.')
+      setData(await api.planningSummary(planningMonths,savedMonth))
     }catch(e:any){
       setError(e.message||'Could not save budget.')
     }finally{
@@ -232,7 +243,7 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
               <MenuItem value={12}>12 months</MenuItem>
             </Select>
           </FormControl>
-          <Button variant="outlined" onClick={()=>setBudgetOpen(true)}>Add / update budget</Button>
+          <Button variant="outlined" onClick={startBudget}>Add / update budget</Button>
           <Button variant="contained" onClick={()=>setCommitmentOpen(true)}>Add commitment</Button>
         </Stack>
       </Stack>
@@ -303,12 +314,23 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
       </Box>
 
       <Paper variant="outlined" sx={{p:{xs:1.35,sm:1.6},borderRadius:2.5}}>
-        <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'flex-start',sm:'center'}} spacing={.8} sx={{mb:1.15}}>
+        <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'stretch',sm:'center'}} spacing={.8} sx={{mb:1.15}}>
           <Box>
             <Typography variant="overline" color="text.secondary">MONTHLY BUDGETS</Typography>
             <Typography fontWeight={850}>{data?.budget_month}</Typography>
           </Box>
-          <Chip size="small" variant="outlined" label={money(data?.budget_spent||0)+' / '+money(data?.budget_limit||0)}/>
+          <Stack direction={{xs:'column',sm:'row'}} spacing={1} alignItems={{xs:'stretch',sm:'center'}}>
+            <TextField
+              label="Budget month"
+              type="month"
+              size="small"
+              InputLabelProps={{shrink:true}}
+              value={budgetMonth}
+              onChange={e=>setBudgetMonth(e.target.value)}
+              sx={{minWidth:{sm:170}}}
+            />
+            <Chip size="small" variant="outlined" label={money(data?.budget_spent||0)+' / '+money(data?.budget_limit||0)}/>
+          </Stack>
         </Stack>
         <Stack spacing={.25}>
           {(data?.budgets||[]).slice(0,8).map((budget:any)=><Box key={budget.id} sx={{display:'grid',gridTemplateColumns:{xs:'minmax(0,1fr) auto',sm:'minmax(130px,.7fr) minmax(180px,1.3fr) 180px 42px'},gap:{xs:.7,sm:1.25},alignItems:'center',py:1,borderTop:'1px solid',borderColor:'divider','&:first-of-type':{borderTop:0,pt:0}}}>
@@ -331,6 +353,13 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
       <DialogTitle>Add or update category budget</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5} sx={{pt:.5}}>
+          <TextField
+            label="Budget month"
+            type="month"
+            InputLabelProps={{shrink:true}}
+            value={budgetForm.month_key}
+            onChange={e=>setBudgetForm({...budgetForm,month_key:e.target.value})}
+          />
           <FormControl size="small">
             <InputLabel>Category</InputLabel>
             <Select
@@ -353,7 +382,7 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
       </DialogContent>
       <DialogActions sx={{p:2}}>
         <Button onClick={()=>setBudgetOpen(false)} disabled={busy==='budget'}>Cancel</Button>
-        <Button variant="contained" onClick={saveBudget} disabled={busy==='budget'||!Number(budgetForm.monthly_limit)}>
+        <Button variant="contained" onClick={saveBudget} disabled={busy==='budget'||!budgetForm.month_key||!Number(budgetForm.monthly_limit)}>
           {busy==='budget'?'Saving…':'Save budget'}
         </Button>
       </DialogActions>

@@ -280,6 +280,21 @@ class Budget(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     category: Mapped[Category] = relationship()
 
+class MonthlyBudget(Base):
+    __tablename__ = "monthly_budgets"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category_id", "month_key", name="uq_monthly_budget_user_category_month"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"), index=True)
+    month_key: Mapped[str] = mapped_column(String(7), index=True)
+    monthly_limit: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    category: Mapped[Category] = relationship()
+
 class Commitment(Base):
     __tablename__ = "commitments"
     id: Mapped[int] = mapped_column(primary_key=True)
