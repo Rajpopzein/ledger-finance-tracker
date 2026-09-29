@@ -87,6 +87,7 @@ class InternalTransferCreate(BaseModel):
 class BudgetUpsert(BaseModel):
     category: str = Field(min_length=1, max_length=80)
     monthly_limit: Decimal = Field(gt=0)
+    month_key: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     is_active: bool = True
 
 class CommitmentCreate(BaseModel):
