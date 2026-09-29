@@ -19,6 +19,11 @@ import {
 import {api} from '../api/client'
 import {useAppData} from '../appData'
 
+const localDateTimeValue=(value=new Date())=>{
+  const offsetMs=value.getTimezoneOffset()*60_000
+  return new Date(value.getTime()-offsetMs).toISOString().slice(0,16)
+}
+
 const defaults=['Food & Dining','Fuel','Groceries','EMI & Loans','Shopping','Bills & Subscriptions','Travel','Health','Payroll','Investments','Other']
 type EntryType='income'|'expense'|'transfer'
 
@@ -31,7 +36,7 @@ const initialForm=()=>({
   to_account_id:'',
   credit_card_id:'',
   category:'Food & Dining',
-  txn_at:new Date().toISOString().slice(0,16),
+  txn_at:localDateTimeValue(),
   merchant:'',
   note:'',
 })
