@@ -24,6 +24,11 @@ import {api} from '../api/client'
 import {useAppData} from '../appData'
 import {claySx} from '../ui'
 
+const localDateTimeValue=(value=new Date())=>{
+  const offsetMs=value.getTimezoneOffset()*60_000
+  return new Date(value.getTime()-offsetMs).toISOString().slice(0,16)
+}
+
 const money=(n:number)=>new Intl.NumberFormat('en-IN',{
   style:'currency',
   currency:'INR',
@@ -47,7 +52,7 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
   const [budgetOpen,setBudgetOpen]=useState(false)
   const [commitmentOpen,setCommitmentOpen]=useState(false)
   const [paymentItem,setPaymentItem]=useState<any>(null)
-  const [paymentForm,setPaymentForm]=useState({source:'',paid_at:new Date().toISOString().slice(0,16)})
+  const [paymentForm,setPaymentForm]=useState({source:'',paid_at:localDateTimeValue()})
   const [budgetForm,setBudgetForm]=useState({category:'Groceries',monthly_limit:''})
   const [commitmentForm,setCommitmentForm]=useState({
     title:'',
@@ -150,7 +155,7 @@ export default function PlanningCard({mode,refreshKey,onChanged}:{mode:'light'|'
     setPaymentItem(item)
     setPaymentForm({
       source:bankAccounts[0]?String(bankAccounts[0].id):'cash',
-      paid_at:new Date().toISOString().slice(0,16),
+      paid_at:localDateTimeValue(),
     })
   }
 
