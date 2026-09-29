@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .db import Base, engine, get_db
+from .db import Base, SessionLocal, engine, get_db
 from .models import Account, AvailableBalance, BalanceSnapshot, Category, CreditCardTransactionLink, InternalTransfer, Transaction, TransactionSource, ImportBatch, ImportPreview, AIConversation, AISetting, Owner, User, Debt, DebtPayment, InvestmentHolding
 from .schemas import AccountCreate, AvailableBalanceUpdate, CashTransactionCreate, ManualTransactionCreate, AISettingsIn, AIQuestion, OwnerLogin, TransactionUpdate
 from .services.dedupe import fingerprint, find_match
@@ -26,7 +26,7 @@ from .finance_features import router as finance_features_router
 from .shortcuts import router as shortcuts_router
 from .investments import router as investments_router
 from .accounting_core import router as accounting_core_router
-from .planning import router as planning_router
+from .planning import migrate_legacy_budgets, router as planning_router
 from .bills import router as bills_router
 from .users import router as users_router, current_user_id, linked_user_ids, resolve_ai_provider_user_id, require_family_ai_insights, scoped_family_user_ids, shared_linked_user_ids
 from .services.auth import (
@@ -106,6 +106,8 @@ async def auth_guard(request: Request, call_next):
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        migrate_legacy_budgets(db)
 
 @app.get("/api/health")
 def health():
