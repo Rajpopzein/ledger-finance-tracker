@@ -14,7 +14,7 @@
     "app:android:init": "npm run app:icons && tauri android init --ci",
     "app:android:dev": "tauri android dev",
     "app:android:build": "npm run app:icons && tauri android build --apk",
-    "app:icons": "tauri icon app-icon.svg"
+    "app:icons": "tauri icon app-icon.svg -o src-tauri/icons"
   },
   "dependencies": {
     "react": "18.2.0",
